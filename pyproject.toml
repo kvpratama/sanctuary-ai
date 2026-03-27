@@ -7,7 +7,9 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.135.2",
     "httpx>=0.28.1",
+    "langchain>=1.2.13",
     "langchain-google-genai>=4.2.1",
+    "langchain-openai>=1.1.12",
     "langchain-text-splitters>=1.1.1",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
@@ -36,3 +38,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.ruff]
+exclude = ["src/db/database_types.py", "src/db/schema.sql"]
+
+[tool.ruff.format]
+exclude = ["src/db/database_types.py", "src/db/schema.sql"]

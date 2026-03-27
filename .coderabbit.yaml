@@ -1,0 +1,6 @@
+reviews:
+  path_filters:
+    - "!**/*.md"
+    - "!**/*.json"
+    - "!**/*.sql"
+    - "!**/*.sh"

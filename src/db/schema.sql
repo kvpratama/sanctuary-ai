@@ -68,7 +68,7 @@ CREATE EXTENSION IF NOT EXISTS "vector" WITH SCHEMA "extensions";
 
 CREATE OR REPLACE FUNCTION "public"."match_document_embeddings"("query_embedding" "extensions"."vector", "filter" "jsonb" DEFAULT '{}'::"jsonb", "match_count" integer DEFAULT 5) RETURNS TABLE("id" "uuid", "content" "text", "metadata" "jsonb", "similarity" double precision)
     LANGUAGE "plpgsql"
-    SET "search_path" TO ''
+    SET "search_path" TO 'extensions', 'public'
     AS $$
 begin
   return query

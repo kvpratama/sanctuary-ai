@@ -5,6 +5,7 @@ import uuid
 from typing import (
     Annotated,
     Any,
+    List,
     Literal,
     NotRequired,
     Optional,
@@ -30,25 +31,15 @@ AuthAalLevel: TypeAlias = Literal["aal1", "aal2", "aal3"]
 
 AuthCodeChallengeMethod: TypeAlias = Literal["s256", "plain"]
 
-AuthOneTimeTokenType: TypeAlias = Literal[
-    "confirmation_token",
-    "reauthentication_token",
-    "recovery_token",
-    "email_change_token_new",
-    "email_change_token_current",
-    "phone_change_token",
-]
+AuthOneTimeTokenType: TypeAlias = Literal["confirmation_token", "reauthentication_token", "recovery_token", "email_change_token_new", "email_change_token_current", "phone_change_token"]
 
 AuthOauthRegistrationType: TypeAlias = Literal["dynamic", "manual"]
 
-AuthOauthAuthorizationStatus: TypeAlias = Literal[
-    "pending", "approved", "denied", "expired"
-]
+AuthOauthAuthorizationStatus: TypeAlias = Literal["pending", "approved", "denied", "expired"]
 
 AuthOauthResponseType: TypeAlias = Literal["code"]
 
 AuthOauthClientType: TypeAlias = Literal["public", "confidential"]
-
 
 class PublicDocuments(BaseModel):
     author: Optional[str] = Field(alias="author")
@@ -64,18 +55,13 @@ class PublicDocuments(BaseModel):
     upload_date: datetime.datetime = Field(alias="upload_date")
     user_id: Optional[uuid.UUID] = Field(alias="user_id")
 
-
 class PublicDocumentsInsert(TypedDict):
     author: NotRequired[Annotated[Optional[str], Field(alias="author")]]
     blob_url: Annotated[str, Field(alias="blob_url")]
     current_page: NotRequired[Annotated[int, Field(alias="current_page")]]
     id: NotRequired[Annotated[uuid.UUID, Field(alias="id")]]
-    ingested_at: NotRequired[
-        Annotated[Optional[datetime.datetime], Field(alias="ingested_at")]
-    ]
-    last_accessed: NotRequired[
-        Annotated[Optional[datetime.datetime], Field(alias="last_accessed")]
-    ]
+    ingested_at: NotRequired[Annotated[Optional[datetime.datetime], Field(alias="ingested_at")]]
+    last_accessed: NotRequired[Annotated[Optional[datetime.datetime], Field(alias="last_accessed")]]
     name: Annotated[str, Field(alias="name")]
     page_count: NotRequired[Annotated[Optional[int], Field(alias="page_count")]]
     size: Annotated[int, Field(alias="size")]
@@ -83,25 +69,19 @@ class PublicDocumentsInsert(TypedDict):
     upload_date: NotRequired[Annotated[datetime.datetime, Field(alias="upload_date")]]
     user_id: NotRequired[Annotated[Optional[uuid.UUID], Field(alias="user_id")]]
 
-
 class PublicDocumentsUpdate(TypedDict):
     author: NotRequired[Annotated[Optional[str], Field(alias="author")]]
     blob_url: NotRequired[Annotated[str, Field(alias="blob_url")]]
     current_page: NotRequired[Annotated[int, Field(alias="current_page")]]
     id: NotRequired[Annotated[uuid.UUID, Field(alias="id")]]
-    ingested_at: NotRequired[
-        Annotated[Optional[datetime.datetime], Field(alias="ingested_at")]
-    ]
-    last_accessed: NotRequired[
-        Annotated[Optional[datetime.datetime], Field(alias="last_accessed")]
-    ]
+    ingested_at: NotRequired[Annotated[Optional[datetime.datetime], Field(alias="ingested_at")]]
+    last_accessed: NotRequired[Annotated[Optional[datetime.datetime], Field(alias="last_accessed")]]
     name: NotRequired[Annotated[str, Field(alias="name")]]
     page_count: NotRequired[Annotated[Optional[int], Field(alias="page_count")]]
     size: NotRequired[Annotated[int, Field(alias="size")]]
     thumbnail_url: NotRequired[Annotated[Optional[str], Field(alias="thumbnail_url")]]
     upload_date: NotRequired[Annotated[datetime.datetime, Field(alias="upload_date")]]
     user_id: NotRequired[Annotated[Optional[uuid.UUID], Field(alias="user_id")]]
-
 
 class PublicDocumentEmbeddings(BaseModel):
     content: str = Field(alias="content")
@@ -112,7 +92,6 @@ class PublicDocumentEmbeddings(BaseModel):
     metadata: Json[Any] = Field(alias="metadata")
     user_id: uuid.UUID = Field(alias="user_id")
 
-
 class PublicDocumentEmbeddingsInsert(TypedDict):
     content: Annotated[str, Field(alias="content")]
     created_at: NotRequired[Annotated[datetime.datetime, Field(alias="created_at")]]
@@ -121,7 +100,6 @@ class PublicDocumentEmbeddingsInsert(TypedDict):
     id: NotRequired[Annotated[uuid.UUID, Field(alias="id")]]
     metadata: NotRequired[Annotated[Json[Any], Field(alias="metadata")]]
     user_id: Annotated[uuid.UUID, Field(alias="user_id")]
-
 
 class PublicDocumentEmbeddingsUpdate(TypedDict):
     content: NotRequired[Annotated[str, Field(alias="content")]]
