@@ -17,12 +17,22 @@ app.add_middleware(
 
 
 @app.get("/")
-def read_root():
+def read_root() -> dict[str, str]:
+    """Return a welcome message for the API.
+
+    Returns:
+        A dictionary containing the API message.
+    """
     return {"message": "Bookified API"}
 
 
 @app.get("/health")
 async def health() -> dict[str, str]:
+    """Check the health status of the API.
+
+    Returns:
+        A dictionary containing the health status.
+    """
     return {"status": "ok"}
 
 
