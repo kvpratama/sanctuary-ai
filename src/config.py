@@ -1,6 +1,10 @@
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+EMBEDDING_DIMENSIONS = 768
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(

@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.routers import ingest
+
 app = FastAPI()
 
 app.add_middleware(
@@ -19,3 +21,6 @@ def read_root():
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+app.include_router(ingest.router)
