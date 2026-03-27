@@ -33,6 +33,5 @@ repos:
       name: pytest
       entry: uv run pytest
       language: system
-      types: [python]
       pass_filenames: false
-      stages: [manual]
+      stages: [push]

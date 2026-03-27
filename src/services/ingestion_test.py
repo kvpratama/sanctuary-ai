@@ -1,5 +1,5 @@
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -214,7 +214,7 @@ class TestMarkIngested:
             ),
             patch("services.ingestion.datetime") as mock_dt,
         ):
-            fake_now = datetime(2026, 3, 27, 12, 0, 0, tzinfo=timezone.utc)
+            fake_now = datetime(2026, 3, 27, 12, 0, 0, tzinfo=UTC)
             mock_dt.now.return_value = fake_now
 
             from services.ingestion import mark_ingested

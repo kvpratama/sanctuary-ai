@@ -1,7 +1,10 @@
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.routers import ingest
+from src.routers import chat, ingest
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -23,4 +26,5 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+app.include_router(chat.router)
 app.include_router(ingest.router)

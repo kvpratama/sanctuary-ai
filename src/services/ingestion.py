@@ -1,14 +1,14 @@
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
-from src.config import settings, EMBEDDING_DIMENSIONS, CHUNK_SIZE, CHUNK_OVERLAP
+from src.config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_DIMENSIONS, settings
 from src.db.client import get_supabase_client
 from src.services.exceptions import DocumentNotFoundError, DownloadError
 
@@ -130,7 +130,7 @@ async def mark_ingested(document_id: str) -> None:
         document_id: UUID of the document to mark.
     """
     client = await get_supabase_client()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     await (
         client.table("documents")
         .update({"ingested_at": now})
