@@ -44,3 +44,6 @@ exclude = ["src/db/database_types.py", "src/db/schema.sql"]
 
 [tool.ruff.format]
 exclude = ["src/db/database_types.py", "src/db/schema.sql"]
+
+[tool.ruff.lint]
+select = ["I"]

@@ -1,4 +1,5 @@
 import io
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -89,38 +90,138 @@ def chunk_pdf(pdf_bytes: bytes) -> list[Document]:
     return splitter.split_documents(documents)
 
 
+def estimate_tokens(texts):
+    # Rough estimate: 1 token ≈ 4 characters
+    return sum(len(t) for t in texts) // 4
+
+
+def embed_with_retry(embeddings_model, batch, max_retries=5):
+    wait = 2
+    for attempt in range(max_retries):
+        try:
+            return embeddings_model.embed_documents(batch)
+        except Exception as e:
+            if "429" in str(e) or "ResourceExhausted" in str(e):
+                if attempt == max_retries - 1:
+                    raise
+                print(f"Rate limited. Waiting {wait}s before retry...")
+                time.sleep(wait)
+                wait *= 2
+            else:
+                raise
+
+
+async def count_stored_chunks(document_id: str, user_id: str) -> int:
+    """Return the number of embeddings already persisted for a document.
+
+    Used by embed_and_store to resume an interrupted ingestion run without
+    re-embedding chunks that were already saved to Supabase.
+
+    Args:
+        document_id: UUID of the parent document.
+        user_id: UUID of the owning user.
+
+    Returns:
+        Number of rows currently in document_embeddings for this document.
+    """
+    client = await get_supabase_client()
+    result = (
+        await client.table("document_embeddings")
+        .select("id", count="exact")  # ty: ignore[invalid-argument-type]
+        .eq("document_id", document_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    return result.count or 0
+
+
 async def embed_and_store(
-    chunks: list[Document], document_id: str, user_id: str
+    chunks: list[Document],
+    document_id: str,
+    user_id: str,
+    batch_size: int = 20,
 ) -> None:
-    """Generate embeddings for chunks and store in Supabase.
+    """Generate embeddings for chunks and store them in Supabase batch-by-batch.
+
+    Each batch is persisted to the database immediately after it is embedded,
+    so a partial run can be resumed without re-embedding already-stored chunks.
+    On restart, the function queries how many chunks are already saved for this
+    document and skips that many from the front of *chunks* before continuing.
 
     Args:
         chunks: List of LangChain Document objects to embed.
         document_id: UUID of the parent document.
         user_id: UUID of the owning user.
+        batch_size: Number of chunks to embed and insert per round-trip.
     """
+    already_stored = await count_stored_chunks(document_id, user_id)
+    if already_stored:
+        print(f"Resuming: skipping {already_stored} already-stored chunks.")
+    remaining_chunks = chunks[already_stored:]
+
+    if not remaining_chunks:
+        print("All chunks already stored — nothing to do.")
+        return
+
     embeddings_model = GoogleGenerativeAIEmbeddings(
         model=f"models/{settings.embedding_model}",
         google_api_key=settings.gemini_api_key,
         task_type="RETRIEVAL_DOCUMENT",
         output_dimensionality=EMBEDDING_DIMENSIONS,
     )
-    texts = [chunk.page_content for chunk in chunks]
-    embeddings = embeddings_model.embed_documents(texts)
-
-    rows = [
-        {
-            "document_id": document_id,
-            "user_id": user_id,
-            "content": chunk.page_content,
-            "embedding": embedding,
-            "metadata": chunk.metadata,
-        }
-        for chunk, embedding in zip(chunks, embeddings)
-    ]
 
     client = await get_supabase_client()
-    await client.table("document_embeddings").insert(rows).execute()
+
+    requests_this_minute = 0
+    tokens_this_minute = 0
+    window_start = time.time()
+
+    for i in range(0, len(remaining_chunks), batch_size):
+        batch_chunks = remaining_chunks[i : i + batch_size]
+        batch_texts = [chunk.page_content for chunk in batch_chunks]
+        batch_tokens = estimate_tokens(batch_texts)
+
+        # Reset rate-limit window if 60 s have elapsed.
+        elapsed = time.time() - window_start
+        if elapsed >= 60:
+            requests_this_minute = 0
+            tokens_this_minute = 0
+            window_start = time.time()
+
+        # Pause when approaching API rate limits.
+        if requests_this_minute >= 50 or tokens_this_minute + batch_tokens > 15000:
+            wait = 60 - elapsed
+            print(
+                f"Approaching limit (reqs={requests_this_minute}, "
+                f"tokens={tokens_this_minute}). Waiting {wait:.1f}s..."
+            )
+            time.sleep(max(wait, 0))
+            requests_this_minute = 0
+            tokens_this_minute = 0
+            window_start = time.time()
+
+        batch_num = already_stored // batch_size + i // batch_size + 1
+        print(f"Embedding batch {batch_num} (~{batch_tokens} tokens)...")
+        batch_embeddings = embed_with_retry(embeddings_model, batch_texts)
+
+        rows = [
+            {
+                "document_id": document_id,
+                "user_id": user_id,
+                "content": chunk.page_content,
+                "embedding": embedding,
+                "metadata": chunk.metadata,
+            }
+            for chunk, embedding in zip(batch_chunks, batch_embeddings)
+        ]
+
+        # Persist this batch immediately so progress is never lost.
+        await client.table("document_embeddings").insert(rows).execute()
+        print(f"Batch {batch_num} stored ({len(rows)} chunks).")
+
+        requests_this_minute += 1
+        tokens_this_minute += batch_tokens
+        time.sleep(5)
 
 
 async def mark_ingested(document_id: str) -> None:
