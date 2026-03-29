@@ -1,10 +1,8 @@
-import re
-
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-from src.config import EMBEDDING_DIMENSIONS, settings
+from src.config import EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
 from src.schemas.chat import Citation
 
@@ -27,6 +25,7 @@ async def retrieve_chunks(
         List of LangChain Document objects with page metadata.
     """
     # Generate embedding for the query
+    settings = get_settings()
     embeddings_model = GoogleGenerativeAIEmbeddings(
         model=f"models/{settings.embedding_model}",
         google_api_key=settings.gemini_api_key,
@@ -68,26 +67,17 @@ async def retrieve_chunks(
     return chunks
 
 
-def extract_citations(answer: str) -> list[Citation]:
-    """Extract page citations from the answer text.
-
-    Looks for patterns like [p. X], [page X], (p. X), etc.
+def extract_citations(chunks: list[Document]) -> list[Citation]:
+    """Derive page citations from retrieved chunk metadata.
 
     Args:
-        answer: The LLM-generated answer text.
+        chunks: List of retrieved Document objects with page metadata.
 
     Returns:
-        List of Citation objects with page numbers.
+        List of Citation objects with unique, sorted page numbers.
     """
-    citations = []
-    # Match patterns like [p. 12], [page 12], (p. 12)
-    pattern = r"\[?(?:p\.?|page)\s*(\d+)\]?"
-    matches = re.findall(pattern, answer, re.IGNORECASE)
-
-    for page_num in matches:
-        citations.append(Citation(page=int(page_num)))
-
-    return citations
+    pages = sorted({chunk.metadata.get("page", 0) for chunk in chunks})
+    return [Citation(page=page) for page in pages]
 
 
 async def generate_answer_with_citations(
@@ -128,6 +118,7 @@ Context:
 Answer:"""
 
     # Initialize LLM using LangChain's init_chat_model
+    settings = get_settings()
     llm = init_chat_model(
         model=settings.llm_model,
         model_provider=settings.llm_provider,
@@ -137,13 +128,12 @@ Answer:"""
         streaming=False,
     )
 
-    response = llm.invoke(prompt)
+    response = await llm.ainvoke(prompt)
     answer_content = response.content if hasattr(response, "content") else str(response)
     answer: str = (
         answer_content if isinstance(answer_content, str) else str(answer_content)
     )
 
-    # Extract citations (answer is str from above)
-    citations = extract_citations(answer)
+    citations = extract_citations(chunks)
 
     return answer, citations

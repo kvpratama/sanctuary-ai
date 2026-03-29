@@ -9,9 +9,12 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
-from src.config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_DIMENSIONS, settings
+from src.config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
 from src.services.exceptions import DocumentNotFoundError, DownloadError
+
+TOKENS_PER_MINUTE = 30_000
+REQUESTS_PER_MINUTE = 100
 
 
 async def get_document(document_id: str, user_id: str) -> dict[str, Any]:
@@ -53,6 +56,7 @@ async def download_pdf(blob_url: str) -> bytes:
     Raises:
         DownloadError: If the HTTP response is not 2xx.
     """
+    settings = get_settings()
     token = settings.bookified_blob_read_write_token.get_secret_value()
     async with httpx.AsyncClient() as client:
         response = await client.get(
@@ -163,6 +167,7 @@ async def embed_and_store(
         print("All chunks already stored — nothing to do.")
         return
 
+    settings = get_settings()
     embeddings_model = GoogleGenerativeAIEmbeddings(
         model=f"models/{settings.embedding_model}",
         google_api_key=settings.gemini_api_key,
@@ -189,7 +194,10 @@ async def embed_and_store(
             window_start = time.time()
 
         # Pause when approaching API rate limits.
-        if requests_this_minute >= 50 or tokens_this_minute + batch_tokens > 15000:
+        if (
+            requests_this_minute >= REQUESTS_PER_MINUTE // 2
+            or tokens_this_minute + batch_tokens > TOKENS_PER_MINUTE // 2
+        ):
             wait = 60 - elapsed
             print(
                 f"Approaching limit (reqs={requests_this_minute}, "

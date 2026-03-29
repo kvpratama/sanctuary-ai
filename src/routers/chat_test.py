@@ -1,33 +1,32 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from src.app import app
 from src.schemas.chat import Citation
 
-
-@pytest.fixture
-def client():
-    """Create a test client for the FastAPI app."""
-    return TestClient(app)
+client = TestClient(app)
 
 
-@pytest.mark.asyncio
-async def test_chat_endpoint_returns_answer_with_citations(client):
+def test_chat_endpoint_returns_answer_with_citations():
     """Test that chat endpoint returns answer with citations."""
     document_id = "test-doc-123"
 
     with (
-        patch("src.routers.chat.retrieve_chunks") as mock_retrieve,
-        patch("src.routers.chat.generate_answer_with_citations") as mock_generate,
+        patch(
+            "src.routers.chat.retrieve_chunks",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "src.routers.chat.generate_answer_with_citations",
+            new_callable=AsyncMock,
+            return_value=(
+                "The author argues this point [p. 12].",
+                [Citation(page=12)],
+            ),
+        ),
     ):
-        mock_retrieve.return_value = []  # Return empty chunks for simplicity
-        mock_generate.return_value = (
-            "The author argues this point [p. 12].",
-            [Citation(page=12)],
-        )
-
         response = client.post(
             f"/chat/{document_id}",
             json={"message": "What is the main argument?"},
@@ -41,21 +40,22 @@ async def test_chat_endpoint_returns_answer_with_citations(client):
         assert data["citations"][0]["page"] == 12
 
 
-@pytest.mark.asyncio
-async def test_chat_endpoint_with_no_results(client):
+def test_chat_endpoint_with_no_results():
     """Test chat endpoint when no relevant chunks found."""
     document_id = "test-doc-456"
 
     with (
-        patch("src.routers.chat.retrieve_chunks") as mock_retrieve,
-        patch("src.routers.chat.generate_answer_with_citations") as mock_generate,
+        patch(
+            "src.routers.chat.retrieve_chunks",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "src.routers.chat.generate_answer_with_citations",
+            new_callable=AsyncMock,
+            return_value=("I don't have enough information.", []),
+        ),
     ):
-        mock_retrieve.return_value = []
-        mock_generate.return_value = (
-            "I don't have enough information.",
-            [],
-        )
-
         response = client.post(
             f"/chat/{document_id}",
             json={"message": "Unknown topic"},
@@ -66,14 +66,15 @@ async def test_chat_endpoint_with_no_results(client):
         assert data["citations"] == []
 
 
-@pytest.mark.asyncio
-async def test_chat_endpoint_error_handling(client):
+def test_chat_endpoint_error_handling():
     """Test chat endpoint error handling."""
     document_id = "test-doc-789"
 
-    with patch("src.routers.chat.retrieve_chunks") as mock_retrieve:
-        mock_retrieve.side_effect = Exception("Database error")
-
+    with patch(
+        "src.routers.chat.retrieve_chunks",
+        new_callable=AsyncMock,
+        side_effect=Exception("Database error"),
+    ):
         response = client.post(
             f"/chat/{document_id}",
             json={"message": "Test question"},

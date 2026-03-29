@@ -1,8 +1,11 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 
 from src.schemas.chat import ChatRequest, ChatResponse
 from src.services.retrieval import generate_answer_with_citations, retrieve_chunks
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -44,6 +47,6 @@ async def chat(
 
         return ChatResponse(answer=answer, citations=citations)
 
-    except Exception as e:
-        # Log error in production, return generic error
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Chat request failed for document %s", document_id)
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -67,9 +67,11 @@ class TestDownloadPdf:
 
         with (
             patch("src.services.ingestion.httpx.AsyncClient") as mock_client_cls,
-            patch("src.services.ingestion.settings") as mock_settings,
+            patch("src.services.ingestion.get_settings") as mock_get_settings,
         ):
+            mock_settings = MagicMock()
             mock_settings.bookified_blob_read_write_token.get_secret_value.return_value = "test-token"
+            mock_get_settings.return_value = mock_settings
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
             from src.services.ingestion import download_pdf
@@ -91,9 +93,11 @@ class TestDownloadPdf:
 
         with (
             patch("src.services.ingestion.httpx.AsyncClient") as mock_client_cls,
-            patch("src.services.ingestion.settings") as mock_settings,
+            patch("src.services.ingestion.get_settings") as mock_get_settings,
         ):
+            mock_settings = MagicMock()
             mock_settings.bookified_blob_read_write_token.get_secret_value.return_value = "test-token"
+            mock_get_settings.return_value = mock_settings
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
             from src.services.ingestion import download_pdf

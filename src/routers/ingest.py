@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 @router.post("/ingest/{document_id}")
-async def ingest_document(document_id: str):
+async def ingest_document(document_id: str) -> dict[str, str | int]:
     """Ingest a document by downloading, chunking, and embedding it.
 
     Orchestrates the full ingestion pipeline for a document:

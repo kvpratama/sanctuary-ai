@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -51,4 +53,11 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000"]
 
 
-settings = Settings()  # ty:ignore[missing-argument]
+@lru_cache
+def get_settings() -> Settings:
+    """Return cached application settings, constructed lazily on first call.
+
+    Returns:
+        The singleton Settings instance.
+    """
+    return Settings()  # ty:ignore[missing-argument]
