@@ -53,7 +53,7 @@ class PublicDocuments(BaseModel):
     size: int = Field(alias="size")
     thumbnail_url: Optional[str] = Field(alias="thumbnail_url")
     upload_date: datetime.datetime = Field(alias="upload_date")
-    user_id: Optional[uuid.UUID] = Field(alias="user_id")
+    user_id: uuid.UUID = Field(alias="user_id")
 
 class PublicDocumentsInsert(TypedDict):
     author: NotRequired[Annotated[Optional[str], Field(alias="author")]]
@@ -67,7 +67,7 @@ class PublicDocumentsInsert(TypedDict):
     size: Annotated[int, Field(alias="size")]
     thumbnail_url: NotRequired[Annotated[Optional[str], Field(alias="thumbnail_url")]]
     upload_date: NotRequired[Annotated[datetime.datetime, Field(alias="upload_date")]]
-    user_id: NotRequired[Annotated[Optional[uuid.UUID], Field(alias="user_id")]]
+    user_id: Annotated[uuid.UUID, Field(alias="user_id")]
 
 class PublicDocumentsUpdate(TypedDict):
     author: NotRequired[Annotated[Optional[str], Field(alias="author")]]
@@ -81,9 +81,10 @@ class PublicDocumentsUpdate(TypedDict):
     size: NotRequired[Annotated[int, Field(alias="size")]]
     thumbnail_url: NotRequired[Annotated[Optional[str], Field(alias="thumbnail_url")]]
     upload_date: NotRequired[Annotated[datetime.datetime, Field(alias="upload_date")]]
-    user_id: NotRequired[Annotated[Optional[uuid.UUID], Field(alias="user_id")]]
+    user_id: NotRequired[Annotated[uuid.UUID, Field(alias="user_id")]]
 
 class PublicDocumentEmbeddings(BaseModel):
+    chunk_key: str = Field(alias="chunk_key")
     content: str = Field(alias="content")
     created_at: datetime.datetime = Field(alias="created_at")
     document_id: uuid.UUID = Field(alias="document_id")
@@ -93,6 +94,7 @@ class PublicDocumentEmbeddings(BaseModel):
     user_id: uuid.UUID = Field(alias="user_id")
 
 class PublicDocumentEmbeddingsInsert(TypedDict):
+    chunk_key: Annotated[str, Field(alias="chunk_key")]
     content: Annotated[str, Field(alias="content")]
     created_at: NotRequired[Annotated[datetime.datetime, Field(alias="created_at")]]
     document_id: Annotated[uuid.UUID, Field(alias="document_id")]
@@ -102,6 +104,7 @@ class PublicDocumentEmbeddingsInsert(TypedDict):
     user_id: Annotated[uuid.UUID, Field(alias="user_id")]
 
 class PublicDocumentEmbeddingsUpdate(TypedDict):
+    chunk_key: NotRequired[Annotated[str, Field(alias="chunk_key")]]
     content: NotRequired[Annotated[str, Field(alias="content")]]
     created_at: NotRequired[Annotated[datetime.datetime, Field(alias="created_at")]]
     document_id: NotRequired[Annotated[uuid.UUID, Field(alias="document_id")]]

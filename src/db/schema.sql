@@ -79,7 +79,7 @@ begin
     1 - (de.embedding <=> query_embedding) as similarity
   from public.document_embeddings de
   where
-    de.user_id     = (filter->>'user_id')::uuid
+        de.user_id     = (filter->>'user_id')::uuid
     and de.document_id = (filter->>'document_id')::uuid
   order by de.embedding <=> query_embedding
   limit match_count;
@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS "public"."document_embeddings" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "user_id" "uuid" NOT NULL,
     "document_id" "uuid" NOT NULL,
+    "chunk_key" "text" NOT NULL,
     "content" "text" NOT NULL,
     "embedding" "extensions"."vector"(768) NOT NULL,
     "metadata" "jsonb" DEFAULT '{}'::"jsonb" NOT NULL,
@@ -110,7 +111,7 @@ ALTER TABLE "public"."document_embeddings" OWNER TO "postgres";
 
 CREATE TABLE IF NOT EXISTS "public"."documents" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "user_id" "uuid",
+    "user_id" "uuid" NOT NULL,
     "name" "text" NOT NULL,
     "size" bigint NOT NULL,
     "blob_url" "text" NOT NULL,
@@ -130,7 +131,17 @@ ALTER TABLE "public"."documents" OWNER TO "postgres";
 
 
 ALTER TABLE ONLY "public"."document_embeddings"
+    ADD CONSTRAINT "document_embeddings_document_id_chunk_key_key" UNIQUE ("document_id", "chunk_key");
+
+
+
+ALTER TABLE ONLY "public"."document_embeddings"
     ADD CONSTRAINT "document_embeddings_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."documents"
+    ADD CONSTRAINT "documents_id_user_id_key" UNIQUE ("id", "user_id");
 
 
 
@@ -156,13 +167,13 @@ CREATE INDEX "idx_documents_upload_date" ON "public"."documents" USING "btree" (
 
 
 
-ALTER TABLE ONLY "public"."document_embeddings"
-    ADD CONSTRAINT "document_embeddings_document_id_fkey" FOREIGN KEY ("document_id") REFERENCES "public"."documents"("id") ON DELETE CASCADE;
-
-
-
 ALTER TABLE ONLY "public"."documents"
     ADD CONSTRAINT "documents_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."document_embeddings"
+    ADD CONSTRAINT "embeddings_document_owner_fkey" FOREIGN KEY ("document_id", "user_id") REFERENCES "public"."documents"("id", "user_id") ON DELETE CASCADE;
 
 
 
