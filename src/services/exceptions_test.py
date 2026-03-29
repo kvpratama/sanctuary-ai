@@ -1,4 +1,4 @@
-from services.exceptions import DocumentNotFoundError, DownloadError
+from src.services.exceptions import DocumentNotFoundError, DownloadError
 
 
 def test_document_not_found_error_has_document_id():

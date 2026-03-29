@@ -32,7 +32,7 @@ async def retrieve_chunks(
         task_type="RETRIEVAL_QUERY",
         output_dimensionality=EMBEDDING_DIMENSIONS,
     )
-    query_embedding = embeddings_model.embed_query(query)
+    query_embedding = await embeddings_model.aembed_query(query)
 
     # Query Supabase for similar chunks with filters
     client = await get_supabase_client()
@@ -54,9 +54,11 @@ async def retrieve_chunks(
         print("No results found")
         return []
 
-    # Convert to LangChain Document format
+    # Convert to LangChain Document format, filtering by similarity threshold
     chunks: list[Document] = []
     for row in result.data:  # ty: ignore[not-iterable]
+        if row.get("similarity", 0) < settings.min_similarity:  # ty: ignore[unresolved-attribute]
+            continue
         chunks.append(
             Document(
                 page_content=row["content"],  # ty: ignore[invalid-argument-type, not-subscriptable]

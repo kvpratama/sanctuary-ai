@@ -47,6 +47,6 @@ async def chat(
 
         return ChatResponse(answer=answer, citations=citations)
 
-    except Exception:
+    except Exception as e:
         logger.exception("Chat request failed for document %s", document_id)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=str(e)) from e

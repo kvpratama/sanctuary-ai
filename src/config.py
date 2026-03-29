@@ -44,11 +44,16 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr
     bookified_blob_read_write_token: SecretStr
 
+    # Blob storage origin allowlist (scheme + host) for safe token forwarding
+    blob_storage_origin: str = "https://public.blob.storage.com"
+
     # Optional settings with defaults
     llm_model: str = "gpt-4o-mini"
     llm_provider: str = "openai"
     llm_provider_base_url: str = "https://api.openai.com/v1"
     embedding_model: str = "gemini-embedding-001"
+
+    min_similarity: float = 0.6
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

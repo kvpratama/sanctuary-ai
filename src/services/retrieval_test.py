@@ -15,6 +15,7 @@ async def test_retrieve_chunks_calls_rpc_with_filter():
     mock_settings = MagicMock()
     mock_settings.embedding_model = "gemini-embedding-001"
     mock_settings.gemini_api_key = "fake-key"
+    mock_settings.min_similarity = 0.5
 
     with (
         patch("src.services.retrieval.get_settings", return_value=mock_settings),
@@ -22,7 +23,7 @@ async def test_retrieve_chunks_calls_rpc_with_filter():
         patch("src.services.retrieval.get_supabase_client") as mock_client_factory,
     ):
         mock_embed_instance = MagicMock()
-        mock_embed_instance.embed_query.return_value = [0.1] * 768
+        mock_embed_instance.aembed_query = AsyncMock(return_value=[0.1] * 768)
         mock_embed_cls.return_value = mock_embed_instance
         mock_client = AsyncMock()
         mock_client_factory.return_value = mock_client
@@ -30,8 +31,8 @@ async def test_retrieve_chunks_calls_rpc_with_filter():
         # Mock RPC result - rpc().execute() is the chain
         mock_result = MagicMock()
         mock_result.data = [
-            {"content": "Test content", "metadata": {"page": 5}},
-            {"content": "More content", "metadata": {"page": 10}},
+            {"content": "Test content", "metadata": {"page": 5}, "similarity": 0.8},
+            {"content": "More content", "metadata": {"page": 10}, "similarity": 0.7},
         ]
 
         # Create a mock for the RPC call chain

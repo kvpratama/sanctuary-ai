@@ -19,7 +19,7 @@ class TestGetDocument:
         fake_row = {"id": "doc-1", "user_id": "user-1", "name": "test.pdf"}
         mock_result = MagicMock()
         mock_result.data = fake_row
-        mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.single.return_value.execute = AsyncMock(
+        mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute = AsyncMock(
             return_value=mock_result
         )
 
@@ -40,7 +40,7 @@ class TestGetDocument:
         mock_client = MagicMock()
         mock_result = MagicMock()
         mock_result.data = None
-        mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.single.return_value.execute = AsyncMock(
+        mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute = AsyncMock(
             return_value=mock_result
         )
 
@@ -71,6 +71,7 @@ class TestDownloadPdf:
         ):
             mock_settings = MagicMock()
             mock_settings.bookified_blob_read_write_token.get_secret_value.return_value = "test-token"
+            mock_settings.blob_storage_origin = "https://example.com"
             mock_get_settings.return_value = mock_settings
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
@@ -97,6 +98,7 @@ class TestDownloadPdf:
         ):
             mock_settings = MagicMock()
             mock_settings.bookified_blob_read_write_token.get_secret_value.return_value = "test-token"
+            mock_settings.blob_storage_origin = "https://example.com"
             mock_get_settings.return_value = mock_settings
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
@@ -104,6 +106,21 @@ class TestDownloadPdf:
 
             with pytest.raises(DownloadError) as exc_info:
                 await download_pdf("https://example.com/test.pdf")
+            assert exc_info.value.status_code == 403
+
+    async def test_rejects_blob_url_with_wrong_origin(self):
+        """Raises DownloadError when blob_url origin doesn't match allowlist."""
+        with patch("src.services.ingestion.get_settings") as mock_get_settings:
+            mock_settings = MagicMock()
+            mock_settings.blob_storage_origin = (
+                "https://trusted.blob.vercel-storage.com"
+            )
+            mock_get_settings.return_value = mock_settings
+
+            from src.services.ingestion import download_pdf
+
+            with pytest.raises(DownloadError) as exc_info:
+                await download_pdf("https://evil.com/steal-token.pdf")
             assert exc_info.value.status_code == 403
 
 
@@ -219,8 +236,8 @@ def _make_embed_and_store_mocks(
     mock_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute = AsyncMock(
         return_value=count_result
     )
-    # insert chain: .insert().execute()
-    mock_client.table.return_value.insert.return_value.execute = AsyncMock(
+    # upsert chain: .upsert().execute()
+    mock_client.table.return_value.upsert.return_value.execute = AsyncMock(
         return_value=None
     )
     return mock_client, mock_embeddings_model
@@ -260,14 +277,15 @@ class TestEmbedAndStore:
         mock_embeddings_model.embed_documents.assert_called_once_with(
             ["Hello world", "Goodbye world"]
         )
-        inserted_rows = mock_client.table.return_value.insert.call_args[0][0]
-        assert len(inserted_rows) == 2
-        assert inserted_rows[0]["document_id"] == "doc-1"
-        assert inserted_rows[0]["user_id"] == "user-1"
-        assert inserted_rows[0]["content"] == "Hello world"
-        assert inserted_rows[0]["embedding"] == fake_embeddings[0]
-        assert inserted_rows[0]["metadata"] == {"page": 0}
-        assert inserted_rows[1]["metadata"] == {"page": 1}
+        upserted_rows = mock_client.table.return_value.upsert.call_args[0][0]
+        assert len(upserted_rows) == 2
+        assert upserted_rows[0]["document_id"] == "doc-1"
+        assert upserted_rows[0]["user_id"] == "user-1"
+        assert upserted_rows[0]["content"] == "Hello world"
+        assert upserted_rows[0]["embedding"] == fake_embeddings[0]
+        assert upserted_rows[0]["metadata"] == {"page": 0}
+        assert "chunk_key" in upserted_rows[0]
+        assert upserted_rows[1]["metadata"] == {"page": 1}
 
     async def test_resumes_from_already_stored_chunks(self):
         """Skips already-stored chunks and only embeds and inserts the remainder."""
@@ -298,10 +316,10 @@ class TestEmbedAndStore:
             await embed_and_store(chunks, "doc-1", "user-1")
 
         mock_embeddings_model.embed_documents.assert_called_once_with(["Goodbye world"])
-        inserted_rows = mock_client.table.return_value.insert.call_args[0][0]
-        assert len(inserted_rows) == 1
-        assert inserted_rows[0]["content"] == "Goodbye world"
-        assert inserted_rows[0]["embedding"] == fake_embeddings[0]
+        upserted_rows = mock_client.table.return_value.upsert.call_args[0][0]
+        assert len(upserted_rows) == 1
+        assert upserted_rows[0]["content"] == "Goodbye world"
+        assert upserted_rows[0]["embedding"] == fake_embeddings[0]
 
     async def test_does_nothing_when_all_chunks_already_stored(self):
         """Returns early without any embedding or insert when all chunks are stored."""
@@ -326,7 +344,7 @@ class TestEmbedAndStore:
             await embed_and_store(chunks, "doc-1", "user-1")
 
         mock_embeddings_model.embed_documents.assert_not_called()
-        mock_client.table.return_value.insert.assert_not_called()
+        mock_client.table.return_value.upsert.assert_not_called()
 
 
 class TestMarkIngested:

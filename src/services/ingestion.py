@@ -1,7 +1,9 @@
+import hashlib
 import io
 import time
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from langchain_core.documents import Document
@@ -36,12 +38,13 @@ async def get_document(document_id: str, user_id: str) -> dict[str, Any]:
         .select("*")
         .eq("id", document_id)
         .eq("user_id", user_id)
-        .single()
+        .maybe_single()
         .execute()
     )
-    if result.data is None:
+    if result is None or result.data is None:
         raise DocumentNotFoundError(document_id)
-    return result.data  # ty: ignore[invalid-return-type]
+    data: dict[str, Any] = result.data  # ty: ignore[invalid-assignment]
+    return data
 
 
 async def download_pdf(blob_url: str) -> bytes:
@@ -57,6 +60,12 @@ async def download_pdf(blob_url: str) -> bytes:
         DownloadError: If the HTTP response is not 2xx.
     """
     settings = get_settings()
+
+    parsed = urlparse(blob_url)
+    blob_url_origin = f"{parsed.scheme}://{parsed.netloc}"
+    if blob_url_origin != settings.blob_storage_origin:
+        raise DownloadError(blob_url, 403)
+
     token = settings.bookified_blob_read_write_token.get_secret_value()
     async with httpx.AsyncClient() as client:
         response = await client.get(
@@ -219,12 +228,20 @@ async def embed_and_store(
                 "content": chunk.page_content,
                 "embedding": embedding,
                 "metadata": chunk.metadata,
+                "chunk_key": hashlib.sha256(
+                    f"{document_id}:{already_stored + i + j}".encode()
+                ).hexdigest(),
             }
-            for chunk, embedding in zip(batch_chunks, batch_embeddings)
+            for j, (chunk, embedding) in enumerate(zip(batch_chunks, batch_embeddings))
         ]
 
         # Persist this batch immediately so progress is never lost.
-        await client.table("document_embeddings").insert(rows).execute()
+        # Upsert ensures idempotency if a batch is partially re-processed.
+        await (
+            client.table("document_embeddings")
+            .upsert(rows, on_conflict="document_id,chunk_key")
+            .execute()
+        )
         print(f"Batch {batch_num} stored ({len(rows)} chunks).")
 
         requests_this_minute += 1

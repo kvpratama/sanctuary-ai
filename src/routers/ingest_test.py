@@ -95,9 +95,10 @@ async def test_ingest_document_not_found(client):
     with patch("src.routers.ingest.get_document", new_callable=AsyncMock) as mock_get:
         mock_get.side_effect = DocumentNotFoundError(document_id)
 
-        with pytest.raises(DocumentNotFoundError):
-            client.post(f"/ingest/{document_id}")
+        response = client.post(f"/ingest/{document_id}")
 
+        assert response.status_code == 404
+        assert "Document not found" in response.json()["detail"]
         mock_get.assert_called_once_with(document_id, user_id)
 
 
@@ -123,9 +124,10 @@ async def test_ingest_document_download_error(client):
         mock_get.return_value = mock_doc
         mock_download.side_effect = DownloadError(mock_doc["blob_url"], 403)
 
-        with pytest.raises(DownloadError):
-            client.post(f"/ingest/{document_id}")
+        response = client.post(f"/ingest/{document_id}")
 
+        assert response.status_code == 502
+        assert "Failed to download" in response.json()["detail"]
         mock_get.assert_called_once_with(document_id, user_id)
         mock_download.assert_called_once_with(mock_doc["blob_url"])
 
