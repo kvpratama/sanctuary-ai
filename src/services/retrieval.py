@@ -1,0 +1,155 @@
+import logging
+import re
+
+from langchain.chat_models import init_chat_model
+from langchain_core.documents import Document
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+from src.config import EMBEDDING_DIMENSIONS, get_settings
+from src.db.client import get_supabase_client
+from src.schemas.chat import Citation
+
+logger = logging.getLogger(__name__)
+
+
+async def retrieve_chunks(
+    query: str,
+    document_id: str,
+    user_id: str,
+    k: int = 5,
+) -> list[Document]:
+    """Retrieve relevant chunks from Supabase vector store.
+
+    Args:
+        query: The user's question.
+        document_id: UUID of the document to search within.
+        user_id: UUID of the user (for authorization).
+        k: Number of chunks to retrieve.
+
+    Returns:
+        List of LangChain Document objects with page metadata.
+    """
+    # Generate embedding for the query
+    settings = get_settings()
+    embeddings_model = GoogleGenerativeAIEmbeddings(
+        model=f"models/{settings.embedding_model}",
+        google_api_key=settings.gemini_api_key,
+        task_type="RETRIEVAL_QUERY",
+        output_dimensionality=EMBEDDING_DIMENSIONS,
+    )
+    query_embedding = await embeddings_model.aembed_query(query)
+
+    # Query Supabase for similar chunks with filters
+    client = await get_supabase_client()
+
+    # Use RPC function for similarity search with filter parameter
+    result = await client.rpc(
+        "match_document_embeddings",
+        {
+            "query_embedding": query_embedding,
+            "filter": {
+                "document_id": document_id,
+                "user_id": user_id,
+            },
+            "match_count": k,
+        },
+    ).execute()
+
+    if not result.data:
+        logger.debug("No retrieval results for document_id=%s", document_id)
+        return []
+
+    # Convert to LangChain Document format, filtering by similarity threshold
+    chunks: list[Document] = []
+    for row in result.data:  # ty: ignore[not-iterable]
+        if row.get("similarity", 0) < settings.min_similarity:  # ty: ignore[unresolved-attribute]
+            continue
+        chunks.append(
+            Document(
+                page_content=row["content"],  # ty: ignore[invalid-argument-type, not-subscriptable]
+                metadata={"page": row["metadata"].get("page")},  # ty: ignore[invalid-argument-type, not-subscriptable]
+            )
+        )
+
+    return chunks
+
+
+def extract_citations(answer: str, chunks: list[Document]) -> list[Citation]:
+    """Parse page citations from the LLM answer and validate against retrieved chunks.
+
+    Looks for ``[p. X]`` markers in the answer text and returns only those
+    page numbers that also appear in the retrieved chunk metadata.
+
+    Args:
+        answer: The LLM-generated answer text containing ``[p. X]`` markers.
+        chunks: List of retrieved Document objects with page metadata.
+
+    Returns:
+        Sorted list of Citation objects for pages both cited and present in chunks.
+        Returns an empty list when no valid cited pages are found.
+    """
+    cited_pages = {int(m) for m in re.findall(r"\[p\.\s*(\d+)\]", answer)}
+    available_pages = {
+        page for chunk in chunks if (page := chunk.metadata.get("page")) is not None
+    }
+    valid_pages = sorted(p for p in cited_pages if p > 0 and p in available_pages)
+    return [Citation(page=page) for page in valid_pages]
+
+
+async def generate_answer_with_citations(
+    query: str,
+    chunks: list[Document],
+) -> tuple[str, list[Citation]]:
+    """Generate an answer based on retrieved chunks with citations.
+
+    Args:
+        query: The user's question.
+        chunks: List of retrieved Document objects.
+
+    Returns:
+        Tuple of (answer_text, citations_list).
+    """
+    if not chunks:
+        return "I don't have enough information to answer that question.", []
+
+    # Build context from chunks with page references
+    context_parts = []
+    for chunk in chunks:
+        page = chunk.metadata.get("page", "unknown")
+        context_parts.append(f"[Page {page}]: {chunk.page_content}")
+
+    context = "\n\n".join(context_parts)
+
+    # Create prompt that constrains answer to retrieved content
+    prompt = f"""You are a helpful assistant that answers questions based ONLY on the provided document content. 
+Do not use any outside knowledge. If the answer cannot be found in the content, say so.
+
+Always cite your sources using [p. X] format where X is the page number.
+
+Question: {query}
+
+Context:
+{context}
+
+Answer:"""
+
+    # Initialize LLM using LangChain's init_chat_model
+    settings = get_settings()
+    llm = init_chat_model(
+        model=settings.llm_model,
+        model_provider=settings.llm_provider,
+        api_key=settings.openai_api_key.get_secret_value(),
+        base_url=settings.llm_provider_base_url,
+        temperature=0,
+        streaming=False,
+    )
+
+    response = await llm.ainvoke(prompt)
+    answer_content = response.content if hasattr(response, "content") else str(response)
+    answer: str = (
+        answer_content if isinstance(answer_content, str) else str(answer_content)
+    )
+
+    citations = extract_citations(answer, chunks)
+
+    return answer, citations
