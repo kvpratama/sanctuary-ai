@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import io
+import logging
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -9,12 +10,15 @@ from urllib.parse import urlparse
 import httpx
 from langchain_core.documents import Document
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_google_genai._common import GoogleGenerativeAIError
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
 from src.config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
 from src.services.exceptions import DocumentNotFoundError, DownloadError
+
+logger = logging.getLogger(__name__)
 
 TOKENS_PER_MINUTE = 30_000
 REQUESTS_PER_MINUTE = 100
@@ -118,15 +122,15 @@ async def embed_with_retry(embeddings_model, batch, max_retries=5):
     for attempt in range(max_retries):
         try:
             return await asyncio.to_thread(embeddings_model.embed_documents, batch)
-        except Exception as e:
-            if "429" in str(e) or "ResourceExhausted" in str(e):
-                if attempt == max_retries - 1:
-                    raise
-                print(f"Rate limited. Waiting {wait}s before retry...")
-                await asyncio.sleep(wait)
-                wait *= 2
-            else:
+        except GoogleGenerativeAIError as e:
+            if attempt == max_retries - 1:
                 raise
+            print(f"Rate limited. Waiting {wait}s before retry...")
+            logger.warning(f"Rate limited. Waiting {wait}s before retry...")
+            await asyncio.sleep(wait)
+            wait *= 2
+        except Exception:
+            raise
 
 
 async def count_stored_chunks(document_id: str, user_id: str) -> int:

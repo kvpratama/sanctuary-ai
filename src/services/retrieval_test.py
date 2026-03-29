@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from src.services.retrieval import (
     extract_citations,
@@ -14,7 +15,7 @@ async def test_retrieve_chunks_calls_rpc_with_filter():
     """Test that retrieve_chunks calls RPC with correct filter."""
     mock_settings = MagicMock()
     mock_settings.embedding_model = "gemini-embedding-001"
-    mock_settings.gemini_api_key = "fake-key"
+    mock_settings.gemini_api_key = SecretStr("fake-key")
     mock_settings.min_similarity = 0.5
 
     with (
