@@ -83,6 +83,7 @@ class TestDownloadPdf:
         mock_client.get.assert_called_once_with(
             "https://example.com/test.pdf",
             headers={"Authorization": "Bearer test-token"},
+            follow_redirects=True,
         )
 
     async def test_raises_download_error_on_failure(self):
@@ -122,6 +123,56 @@ class TestDownloadPdf:
             with pytest.raises(DownloadError) as exc_info:
                 await download_pdf("https://evil.com/steal-token.pdf")
             assert exc_info.value.status_code == 403
+
+    async def test_follows_redirects(self):
+        """Specifically check that follow_redirects=True is passed to httpx."""
+        mock_response = httpx.Response(200, content=b"content")
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("src.services.ingestion.httpx.AsyncClient") as mock_client_cls,
+            patch("src.services.ingestion.get_settings") as mock_get_settings,
+        ):
+            mock_settings = MagicMock()
+            mock_settings.bookified_blob_read_write_token.get_secret_value.return_value = "token"
+            mock_settings.blob_storage_origin = "https://example.com"
+            mock_get_settings.return_value = mock_settings
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            from src.services.ingestion import download_pdf
+
+            await download_pdf("https://example.com/test.pdf")
+
+        mock_client.get.assert_called_once_with(
+            "https://example.com/test.pdf",
+            headers={"Authorization": "Bearer token"},
+            follow_redirects=True,
+        )
+
+    async def test_raises_download_error_on_network_exception(self):
+        """Raises DownloadError when httpx raises a RequestError."""
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection failed"))
+
+        with (
+            patch("src.services.ingestion.httpx.AsyncClient") as mock_client_cls,
+            patch("src.services.ingestion.get_settings") as mock_get_settings,
+        ):
+            mock_settings = MagicMock()
+            mock_settings.bookified_blob_read_write_token.get_secret_value.return_value = "token"
+            mock_settings.blob_storage_origin = "https://example.com"
+            mock_get_settings.return_value = mock_settings
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            from src.services.ingestion import download_pdf
+
+            with pytest.raises(DownloadError) as exc_info:
+                await download_pdf("https://example.com/test.pdf")
+
+            assert "Connection failed" in str(exc_info.value)
+            assert isinstance(exc_info.value.status_code, httpx.ConnectError)
 
 
 def _make_pdf_bytes_with_text(pages: list[str]) -> bytes:

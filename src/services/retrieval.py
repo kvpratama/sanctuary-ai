@@ -1,3 +1,4 @@
+import logging
 import re
 
 from langchain.chat_models import init_chat_model
@@ -7,6 +8,8 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from src.config import EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
 from src.schemas.chat import Citation
+
+logger = logging.getLogger(__name__)
 
 
 async def retrieve_chunks(
@@ -53,7 +56,7 @@ async def retrieve_chunks(
     ).execute()
 
     if not result.data:
-        print("No results found")
+        logger.debug("No retrieval results for document_id=%s", document_id)
         return []
 
     # Convert to LangChain Document format, filtering by similarity threshold
@@ -64,7 +67,7 @@ async def retrieve_chunks(
         chunks.append(
             Document(
                 page_content=row["content"],  # ty: ignore[invalid-argument-type, not-subscriptable]
-                metadata={"page": row["metadata"].get("page", 0)},  # ty: ignore[invalid-argument-type, not-subscriptable]
+                metadata={"page": row["metadata"].get("page")},  # ty: ignore[invalid-argument-type, not-subscriptable]
             )
         )
 
@@ -86,8 +89,10 @@ def extract_citations(answer: str, chunks: list[Document]) -> list[Citation]:
         Returns an empty list when no valid cited pages are found.
     """
     cited_pages = {int(m) for m in re.findall(r"\[p\.\s*(\d+)\]", answer)}
-    available_pages = {chunk.metadata.get("page", 0) for chunk in chunks}
-    valid_pages = sorted(cited_pages & available_pages)
+    available_pages = {
+        page for chunk in chunks if (page := chunk.metadata.get("page")) is not None
+    }
+    valid_pages = sorted(p for p in cited_pages if p > 0 and p in available_pages)
     return [Citation(page=page) for page in valid_pages]
 
 

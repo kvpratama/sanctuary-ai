@@ -68,13 +68,17 @@ async def download_pdf(blob_url: str) -> bytes:
         raise DownloadError(blob_url, 403)
 
     token = settings.bookified_blob_read_write_token.get_secret_value()
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            blob_url,
-            headers={"Authorization": f"Bearer {token}"},
-        )
-    if response.status_code >= 400:
-        raise DownloadError(blob_url, response.status_code)
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                blob_url,
+                headers={"Authorization": f"Bearer {token}"},
+                follow_redirects=True,
+            )
+        if response.status_code >= 300:
+            raise DownloadError(blob_url, response.status_code)
+    except (httpx.RequestError, httpx.HTTPStatusError) as err:
+        raise DownloadError(blob_url, err) from err
     return response.content
 
 

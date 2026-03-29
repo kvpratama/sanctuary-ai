@@ -33,6 +33,7 @@ async def test_retrieve_chunks_calls_rpc_with_filter():
         mock_result.data = [
             {"content": "Test content", "metadata": {"page": 5}, "similarity": 0.8},
             {"content": "More content", "metadata": {"page": 10}, "similarity": 0.7},
+            {"content": "Low similarity", "metadata": {"page": 1}, "similarity": 0.1},
         ]
 
         # Create a mock for the RPC call chain
@@ -59,7 +60,7 @@ async def test_retrieve_chunks_calls_rpc_with_filter():
         assert params["match_count"] == 3
 
         # Verify result conversion
-        assert len(result) == 2
+        assert len(result) == 2  # The 0.1 similarity entry should be filtered out
         assert result[0].page_content == "Test content"
         assert result[0].metadata["page"] == 5
 
