@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import io
 import time
@@ -108,17 +109,17 @@ def estimate_tokens(texts):
     return sum(len(t) for t in texts) // 4
 
 
-def embed_with_retry(embeddings_model, batch, max_retries=5):
+async def embed_with_retry(embeddings_model, batch, max_retries=5):
     wait = 2
     for attempt in range(max_retries):
         try:
-            return embeddings_model.embed_documents(batch)
+            return await asyncio.to_thread(embeddings_model.embed_documents, batch)
         except Exception as e:
             if "429" in str(e) or "ResourceExhausted" in str(e):
                 if attempt == max_retries - 1:
                     raise
                 print(f"Rate limited. Waiting {wait}s before retry...")
-                time.sleep(wait)
+                await asyncio.sleep(wait)
                 wait *= 2
             else:
                 raise
@@ -212,14 +213,14 @@ async def embed_and_store(
                 f"Approaching limit (reqs={requests_this_minute}, "
                 f"tokens={tokens_this_minute}). Waiting {wait:.1f}s..."
             )
-            time.sleep(max(wait, 0))
+            await asyncio.sleep(max(wait, 0))
             requests_this_minute = 0
             tokens_this_minute = 0
             window_start = time.time()
 
         batch_num = already_stored // batch_size + i // batch_size + 1
         print(f"Embedding batch {batch_num} (~{batch_tokens} tokens)...")
-        batch_embeddings = embed_with_retry(embeddings_model, batch_texts)
+        batch_embeddings = await embed_with_retry(embeddings_model, batch_texts)
 
         rows = [
             {
@@ -232,7 +233,9 @@ async def embed_and_store(
                     f"{document_id}:{already_stored + i + j}".encode()
                 ).hexdigest(),
             }
-            for j, (chunk, embedding) in enumerate(zip(batch_chunks, batch_embeddings))
+            for j, (chunk, embedding) in enumerate(
+                zip(batch_chunks, batch_embeddings, strict=True)
+            )
         ]
 
         # Persist this batch immediately so progress is never lost.
@@ -246,7 +249,7 @@ async def embed_and_store(
 
         requests_this_minute += 1
         tokens_this_minute += batch_tokens
-        time.sleep(5)
+        await asyncio.sleep(5)
 
 
 async def mark_ingested(document_id: str) -> None:

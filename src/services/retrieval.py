@@ -1,3 +1,5 @@
+import re
+
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -69,17 +71,24 @@ async def retrieve_chunks(
     return chunks
 
 
-def extract_citations(chunks: list[Document]) -> list[Citation]:
-    """Derive page citations from retrieved chunk metadata.
+def extract_citations(answer: str, chunks: list[Document]) -> list[Citation]:
+    """Parse page citations from the LLM answer and validate against retrieved chunks.
+
+    Looks for ``[p. X]`` markers in the answer text and returns only those
+    page numbers that also appear in the retrieved chunk metadata.
 
     Args:
+        answer: The LLM-generated answer text containing ``[p. X]`` markers.
         chunks: List of retrieved Document objects with page metadata.
 
     Returns:
-        List of Citation objects with unique, sorted page numbers.
+        Sorted list of Citation objects for pages both cited and present in chunks.
+        Returns an empty list when no valid cited pages are found.
     """
-    pages = sorted({chunk.metadata.get("page", 0) for chunk in chunks})
-    return [Citation(page=page) for page in pages]
+    cited_pages = {int(m) for m in re.findall(r"\[p\.\s*(\d+)\]", answer)}
+    available_pages = {chunk.metadata.get("page", 0) for chunk in chunks}
+    valid_pages = sorted(cited_pages & available_pages)
+    return [Citation(page=page) for page in valid_pages]
 
 
 async def generate_answer_with_citations(
@@ -136,6 +145,6 @@ Answer:"""
         answer_content if isinstance(answer_content, str) else str(answer_content)
     )
 
-    citations = extract_citations(chunks)
+    citations = extract_citations(answer, chunks)
 
     return answer, citations

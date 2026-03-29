@@ -64,8 +64,8 @@ async def test_retrieve_chunks_calls_rpc_with_filter():
         assert result[0].metadata["page"] == 5
 
 
-def test_extract_citations_from_chunks():
-    """Test citation extraction derives pages from chunk metadata."""
+def test_extract_citations_returns_only_cited_pages():
+    """Test citation extraction returns only pages cited in the answer."""
     from langchain_core.documents import Document
 
     chunks = [
@@ -73,16 +73,42 @@ def test_extract_citations_from_chunks():
         Document(page_content="content b", metadata={"page": 12}),
         Document(page_content="content c", metadata={"page": 15}),
     ]
-    citations = extract_citations(chunks)
+    answer = "Some info [p. 12] and more [p. 15]."
+    citations = extract_citations(answer, chunks)
 
     assert len(citations) == 2
     assert citations[0].page == 12
     assert citations[1].page == 15
 
 
+def test_extract_citations_ignores_pages_not_in_chunks():
+    """Test that cited pages not present in chunks are excluded."""
+    from langchain_core.documents import Document
+
+    chunks = [
+        Document(page_content="content a", metadata={"page": 5}),
+    ]
+    answer = "See [p. 5] and [p. 99]."
+    citations = extract_citations(answer, chunks)
+
+    assert len(citations) == 1
+    assert citations[0].page == 5
+
+
+def test_extract_citations_no_markers_returns_empty():
+    """Test that an answer with no page markers yields no citations."""
+    from langchain_core.documents import Document
+
+    chunks = [
+        Document(page_content="content a", metadata={"page": 5}),
+    ]
+    citations = extract_citations("No page markers here.", chunks)
+    assert citations == []
+
+
 def test_extract_citations_empty():
     """Test citation extraction with no chunks."""
-    citations = extract_citations([])
+    citations = extract_citations("Some answer [p. 1].", [])
     assert citations == []
 
 

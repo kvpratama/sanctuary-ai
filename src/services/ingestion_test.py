@@ -267,7 +267,7 @@ class TestEmbedAndStore:
                 "src.services.ingestion.GoogleGenerativeAIEmbeddings",
                 return_value=mock_embeddings_model,
             ),
-            patch("src.services.ingestion.time.sleep"),
+            patch("src.services.ingestion.asyncio.sleep", new_callable=AsyncMock),
         ):
             from src.services.ingestion import embed_and_store
 
@@ -309,7 +309,7 @@ class TestEmbedAndStore:
                 "src.services.ingestion.GoogleGenerativeAIEmbeddings",
                 return_value=mock_embeddings_model,
             ),
-            patch("src.services.ingestion.time.sleep"),
+            patch("src.services.ingestion.asyncio.sleep", new_callable=AsyncMock),
         ):
             from src.services.ingestion import embed_and_store
 
