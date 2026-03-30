@@ -1,5 +1,6 @@
 import logging
 import re
+from collections.abc import AsyncGenerator
 
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
@@ -153,3 +154,60 @@ Answer:"""
     citations = extract_citations(answer, chunks)
 
     return answer, citations
+
+
+async def stream_answer_with_citations(
+    query: str,
+    chunks: list[Document],
+) -> AsyncGenerator[str | tuple[list[Citation]], None]:
+    """Stream LLM answer tokens, then yield citations as a final sentinel.
+
+    Yields:
+        str: Individual token strings as they arrive from the LLM.
+        tuple[list[Citation]]: Final item — a 1-tuple containing the citations list.
+    """
+    if not chunks:
+        yield "I don't have enough information to answer that question."
+        yield ([],)
+        return
+
+    # Build context (same logic as generate_answer_with_citations)
+    context_parts = []
+    for chunk in chunks:
+        page = chunk.metadata.get("page", "unknown")
+        context_parts.append(f"[Page {page}]: {chunk.page_content}")
+
+    context = "\n\n".join(context_parts)
+
+    prompt = f"""You are a helpful assistant that answers questions based ONLY on the provided document content. 
+Do not use any outside knowledge. If the answer cannot be found in the content, say so.
+
+Always cite your sources using [p. X] format where X is the page number.
+
+Question: {query}
+
+Context:
+{context}
+
+Answer:"""
+
+    settings = get_settings()
+    llm = init_chat_model(
+        model=settings.llm_model,
+        model_provider=settings.llm_provider,
+        api_key=settings.openai_api_key.get_secret_value(),
+        base_url=settings.llm_provider_base_url,
+        temperature=0,
+        streaming=True,
+    )
+
+    full_answer = ""
+    async for chunk in llm.astream(prompt):
+        content = chunk.content if hasattr(chunk, "content") else str(chunk)
+        token: str = content if isinstance(content, str) else str(content)
+        if token:
+            full_answer += token
+            yield token
+
+    citations = extract_citations(full_answer, chunks)
+    yield (citations,)

@@ -124,3 +124,68 @@ async def test_generate_answer_with_no_chunks():
 
     assert "don't have enough information" in answer.lower()
     assert citations == []
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_with_citations_yields_tokens_then_citations():
+    """Test streaming yields token strings then a citations tuple."""
+    from langchain_core.documents import Document
+    from langchain_core.messages import AIMessageChunk
+
+    from src.services.retrieval import stream_answer_with_citations
+
+    chunks_input = [
+        Document(page_content="content a", metadata={"page": 12}),
+    ]
+
+    async def fake_astream(prompt):
+        for text in ["The author ", "argues that [p. 12]."]:
+            yield AIMessageChunk(content=text)
+
+    mock_settings = MagicMock()
+    mock_settings.llm_model = "gpt-4o-mini"
+    mock_settings.llm_provider = "openai"
+    mock_settings.openai_api_key = SecretStr("fake-key")
+    mock_settings.llm_provider_base_url = "https://api.openai.com/v1"
+
+    with (
+        patch("src.services.retrieval.get_settings", return_value=mock_settings),
+        patch("src.services.retrieval.init_chat_model") as mock_init,
+    ):
+        mock_llm = MagicMock()
+        mock_llm.astream = fake_astream
+        mock_init.return_value = mock_llm
+
+        results = []
+        async for item in stream_answer_with_citations(
+            query="What is the main argument?",
+            chunks=chunks_input,
+        ):
+            results.append(item)
+
+    # All items except the last are token strings
+    tokens = results[:-1]
+    assert tokens == ["The author ", "argues that [p. 12]."]
+
+    # Last item is a tuple of citations
+    final = results[-1]
+    assert isinstance(final, tuple)
+    citations = final[0]
+    assert len(citations) == 1
+    assert citations[0].page == 12
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_with_citations_no_chunks():
+    """Test streaming with no chunks yields canned response and empty citations."""
+    from src.services.retrieval import stream_answer_with_citations
+
+    results = []
+    async for item in stream_answer_with_citations(
+        query="test question",
+        chunks=[],
+    ):
+        results.append(item)
+
+    assert results[0] == "I don't have enough information to answer that question."
+    assert results[1] == ([],)
