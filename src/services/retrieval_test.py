@@ -65,6 +65,45 @@ async def test_retrieve_chunks_calls_rpc_with_filter():
         assert result[0].metadata["page"] == 5
 
 
+@pytest.mark.asyncio
+async def test_retrieve_chunks_uses_provided_client():
+    """retrieve_chunks uses the explicitly provided client instead of the default."""
+    mock_settings = MagicMock()
+    mock_settings.embedding_model = "gemini-embedding-001"
+    mock_settings.gemini_api_key = SecretStr("fake-key")
+    mock_settings.min_similarity = 0.5
+
+    mock_client = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.data = []
+
+    # Mock RPC execution
+    mock_execute = AsyncMock(return_value=mock_result)
+    mock_rpc_builder = MagicMock()
+    mock_rpc_builder.execute = mock_execute
+    mock_client.rpc = MagicMock(return_value=mock_rpc_builder)
+
+    with (
+        patch("src.services.retrieval.get_settings", return_value=mock_settings),
+        patch("src.services.retrieval.GoogleGenerativeAIEmbeddings") as mock_embed_cls,
+        patch("src.services.retrieval.get_supabase_client") as mock_get_client,
+    ):
+        mock_embed_instance = MagicMock()
+        mock_embed_instance.aembed_query = AsyncMock(return_value=[0.1] * 768)
+        mock_embed_cls.return_value = mock_embed_instance
+
+        result = await retrieve_chunks(
+            query="test",
+            document_id="doc-123",
+            user_id="user-456",
+            client=mock_client,
+        )
+
+        assert result == []
+        mock_client.rpc.assert_called_once()
+        mock_get_client.assert_not_called()
+
+
 def test_extract_citations_returns_only_cited_pages():
     """Test citation extraction returns only pages cited in the answer."""
     from langchain_core.documents import Document

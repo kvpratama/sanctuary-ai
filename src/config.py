@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     # Required settings (loaded from environment variables)
     supabase_url: SecretStr
     supabase_key: SecretStr
+    supabase_anon_key: SecretStr
     supabase_jwt_secret: SecretStr
     openai_api_key: SecretStr
     gemini_api_key: SecretStr
