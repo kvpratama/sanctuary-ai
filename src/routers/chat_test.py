@@ -1,7 +1,7 @@
 """Tests for the chat router endpoints."""
 
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from typing import Union
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -19,7 +19,8 @@ JWT_SECRET = "test-jwt-secret-for-auth-tests-minimum-32-bytes"
 
 
 @pytest.fixture(autouse=True)
-def _patch_jwt_secret():
+def _patch_jwt_secret() -> Generator[None, None, None]:
+    """Patch get_settings so the auth dependency uses our known JWT secret."""
     mock_settings = MagicMock()
     mock_settings.supabase_jwt_secret = SecretStr(JWT_SECRET)
     with patch("src.auth.get_settings", return_value=mock_settings):
@@ -27,6 +28,14 @@ def _patch_jwt_secret():
 
 
 def _make_token(user_id: str = USER_ID) -> str:
+    """Generate a test JWT token for the given user ID.
+
+    Args:
+        user_id: The user ID to encode in the token. Defaults to USER_ID.
+
+    Returns:
+        A JWT token string encoded with the test secret.
+    """
     return pyjwt.encode(
         {"sub": user_id, "aud": "authenticated"},
         JWT_SECRET,
@@ -289,7 +298,7 @@ async def test_chat_stream_error_during_streaming() -> None:
 
 
 @pytest.mark.asyncio
-async def test_chat_without_auth_returns_401():
+async def test_chat_without_auth_returns_401() -> None:
     """Chat endpoint without auth header returns 401."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

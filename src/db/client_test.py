@@ -79,7 +79,7 @@ async def test_close_supabase_client_clears_cached_client():
     assert client_module._supabase_client is None
 
 
-async def test_get_authenticated_client_uses_anon_key():
+async def test_get_authenticated_client_uses_anon_key() -> None:
     """get_authenticated_client creates a client with the anon key and sets the user session."""
     mock_settings = MagicMock()
     mock_settings.supabase_url.get_secret_value.return_value = (

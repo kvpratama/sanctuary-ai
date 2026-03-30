@@ -1,5 +1,6 @@
 """Tests for the application configuration and settings."""
 
+import pytest
 from pydantic import SecretStr
 
 from src.config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_DIMENSIONS, Settings
@@ -108,7 +109,7 @@ def test_settings_secret_str_type(monkeypatch):
     assert isinstance(settings.bookified_blob_read_write_token, SecretStr)
 
 
-def test_settings_loads_supabase_anon_key(monkeypatch):
+def test_settings_loads_supabase_anon_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """Settings loads supabase_anon_key from environment."""
     monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
     monkeypatch.setenv("SUPABASE_KEY", "test-key")

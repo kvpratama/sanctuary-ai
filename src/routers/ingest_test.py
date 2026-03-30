@@ -25,6 +25,14 @@ def _patch_jwt_secret():
 
 
 def _make_token(user_id: str = USER_ID) -> str:
+    """Generate a test JWT token for the given user ID.
+
+    Args:
+        user_id: The user ID to encode in the token. Defaults to USER_ID.
+
+    Returns:
+        A JWT token string encoded with the test secret.
+    """
     return pyjwt.encode(
         {"sub": user_id, "aud": "authenticated"},
         JWT_SECRET,
@@ -33,7 +41,7 @@ def _make_token(user_id: str = USER_ID) -> str:
 
 
 @pytest.mark.asyncio
-async def test_ingest_document_success():
+async def test_ingest_document_success() -> None:
     """Test successful document ingestion pipeline."""
     document_id = "test-doc-123"
 
