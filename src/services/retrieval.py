@@ -1,5 +1,6 @@
 import logging
 import re
+from collections.abc import AsyncGenerator
 
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
@@ -7,7 +8,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from src.config import EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
-from src.schemas.chat import Citation
+from src.schemas.chat import Citation, CitationsEvent, StreamEvent, TokenEvent
 
 logger = logging.getLogger(__name__)
 
@@ -96,23 +97,24 @@ def extract_citations(answer: str, chunks: list[Document]) -> list[Citation]:
     return [Citation(page=page) for page in valid_pages]
 
 
-async def generate_answer_with_citations(
+async def stream_answer_with_citations(
     query: str,
     chunks: list[Document],
-) -> tuple[str, list[Citation]]:
-    """Generate an answer based on retrieved chunks with citations.
+) -> AsyncGenerator[StreamEvent, None]:
+    """Stream LLM answer tokens, then yield a citations event.
 
-    Args:
-        query: The user's question.
-        chunks: List of retrieved Document objects.
-
-    Returns:
-        Tuple of (answer_text, citations_list).
+    Yields:
+        TokenEvent: Individual token strings as they arrive from the LLM.
+        CitationsEvent: Final item containing the citations list.
     """
     if not chunks:
-        return "I don't have enough information to answer that question.", []
+        yield TokenEvent(
+            token="I don't have enough information to answer that question."
+        )
+        yield CitationsEvent(citations=[])
+        return
 
-    # Build context from chunks with page references
+    # Build context (same logic as generate_answer_with_citations)
     context_parts = []
     for chunk in chunks:
         page = chunk.metadata.get("page", "unknown")
@@ -120,7 +122,6 @@ async def generate_answer_with_citations(
 
     context = "\n\n".join(context_parts)
 
-    # Create prompt that constrains answer to retrieved content
     prompt = f"""You are a helpful assistant that answers questions based ONLY on the provided document content. 
 Do not use any outside knowledge. If the answer cannot be found in the content, say so.
 
@@ -133,7 +134,6 @@ Context:
 
 Answer:"""
 
-    # Initialize LLM using LangChain's init_chat_model
     settings = get_settings()
     llm = init_chat_model(
         model=settings.llm_model,
@@ -141,15 +141,21 @@ Answer:"""
         api_key=settings.openai_api_key.get_secret_value(),
         base_url=settings.llm_provider_base_url,
         temperature=0,
-        streaming=False,
+        streaming=True,
     )
 
-    response = await llm.ainvoke(prompt)
-    answer_content = response.content if hasattr(response, "content") else str(response)
-    answer: str = (
-        answer_content if isinstance(answer_content, str) else str(answer_content)
-    )
+    full_answer = ""
+    async for chunk in llm.astream(prompt):
+        content = chunk.content if hasattr(chunk, "content") else str(chunk)
+        token: str = content if isinstance(content, str) else str(content)
+        if token:
+            full_answer += token
+            yield TokenEvent(token=token)
 
-    citations = extract_citations(answer, chunks)
+    if not full_answer:
+        yield TokenEvent(
+            token="I don't have enough information to answer that question."
+        )
 
-    return answer, citations
+    citations = extract_citations(full_answer, chunks)
+    yield CitationsEvent(citations=citations)

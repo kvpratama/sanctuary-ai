@@ -5,7 +5,6 @@ from pydantic import SecretStr
 
 from src.services.retrieval import (
     extract_citations,
-    generate_answer_with_citations,
     retrieve_chunks,
 )
 
@@ -115,12 +114,114 @@ def test_extract_citations_empty():
 
 
 @pytest.mark.asyncio
-async def test_generate_answer_with_no_chunks():
-    """Test generate_answer_with_citations with no chunks."""
-    answer, citations = await generate_answer_with_citations(
+async def test_stream_answer_with_citations_yields_tokens_then_citations():
+    """Test streaming yields token strings then a citations tuple."""
+    from langchain_core.documents import Document
+    from langchain_core.messages import AIMessageChunk
+
+    from src.services.retrieval import stream_answer_with_citations
+
+    chunks_input = [
+        Document(page_content="content a", metadata={"page": 12}),
+    ]
+
+    async def fake_astream(prompt):
+        for text in ["The author ", "argues that [p. 12]."]:
+            yield AIMessageChunk(content=text)
+
+    mock_settings = MagicMock()
+    mock_settings.llm_model = "gpt-4o-mini"
+    mock_settings.llm_provider = "openai"
+    mock_settings.openai_api_key = SecretStr("fake-key")
+    mock_settings.llm_provider_base_url = "https://api.openai.com/v1"
+
+    with (
+        patch("src.services.retrieval.get_settings", return_value=mock_settings),
+        patch("src.services.retrieval.init_chat_model") as mock_init,
+    ):
+        mock_llm = MagicMock()
+        mock_llm.astream = fake_astream
+        mock_init.return_value = mock_llm
+
+        results = []
+        async for item in stream_answer_with_citations(
+            query="What is the main argument?",
+            chunks=chunks_input,
+        ):
+            results.append(item)
+
+    # All items except the last are TokenEvents
+    tokens = results[:-1]
+    assert all(e.type == "token" for e in tokens)
+    assert [e.token for e in tokens] == ["The author ", "argues that [p. 12]."]
+
+    # Last item is a CitationsEvent
+    final = results[-1]
+    assert final.type == "citations"
+    assert len(final.citations) == 1
+    assert final.citations[0].page == 12
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_empty_llm_response_yields_fallback_token():
+    """Test that an empty LLM stream emits the fallback token then CitationsEvent."""
+    from langchain_core.documents import Document
+
+    from src.services.retrieval import stream_answer_with_citations
+
+    chunks_input = [
+        Document(page_content="content a", metadata={"page": 3}),
+    ]
+
+    async def empty_astream(prompt):
+        return
+        yield  # noqa: RET504 — makes this an async generator
+
+    mock_settings = MagicMock()
+    mock_settings.llm_model = "gpt-4o-mini"
+    mock_settings.llm_provider = "openai"
+    mock_settings.openai_api_key = SecretStr("fake-key")
+    mock_settings.llm_provider_base_url = "https://api.openai.com/v1"
+
+    with (
+        patch("src.services.retrieval.get_settings", return_value=mock_settings),
+        patch("src.services.retrieval.init_chat_model") as mock_init,
+    ):
+        mock_llm = MagicMock()
+        mock_llm.astream = empty_astream
+        mock_init.return_value = mock_llm
+
+        results = []
+        async for item in stream_answer_with_citations(
+            query="anything",
+            chunks=chunks_input,
+        ):
+            results.append(item)
+
+    assert len(results) == 2
+    assert results[0].type == "token"
+    assert (
+        results[0].token == "I don't have enough information to answer that question."
+    )
+    assert results[1].type == "citations"
+    assert results[1].citations == []
+
+
+@pytest.mark.asyncio
+async def test_stream_answer_with_citations_no_chunks():
+    """Test streaming with no chunks yields canned response and empty citations."""
+    from src.services.retrieval import stream_answer_with_citations
+
+    results = []
+    async for item in stream_answer_with_citations(
         query="test question",
         chunks=[],
-    )
+    ):
+        results.append(item)
 
-    assert "don't have enough information" in answer.lower()
-    assert citations == []
+    assert results[0].type == "token"
+    assert (
+        results[0].token == "I don't have enough information to answer that question."
+    )
+    assert results[1].type == "citations"
+    assert results[1].citations == []

@@ -206,9 +206,9 @@ class TestChunkPdf:
             assert isinstance(chunk, Document)
             assert "page" in chunk.metadata
 
-        # Pages are 0-indexed (first page = 0, second page = 1)
+        # Pages are 1-indexed (first page = 1, second page = 2)
         page_numbers = [int(chunk.metadata["page"]) for chunk in chunks]
-        assert page_numbers == [0, 1]
+        assert page_numbers == [1, 2]
 
     def test_returns_empty_list_for_blank_pdf(self):
         """A PDF with no text content returns an empty list."""
