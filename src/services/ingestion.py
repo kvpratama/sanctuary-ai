@@ -17,6 +17,7 @@ from pypdf import PdfReader
 from src.config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
 from src.services.exceptions import DocumentNotFoundError, DownloadError
+from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,9 @@ TOKENS_PER_MINUTE = 30_000
 REQUESTS_PER_MINUTE = 100
 
 
-async def get_document(document_id: str, user_id: str) -> dict[str, Any]:
+async def get_document(
+    document_id: str, user_id: str, *, client: AsyncClient | None = None
+) -> dict[str, Any]:
     """Fetch a document from the documents table.
 
     Args:
@@ -37,7 +40,8 @@ async def get_document(document_id: str, user_id: str) -> dict[str, Any]:
     Raises:
         DocumentNotFoundError: If the document does not exist.
     """
-    client = await get_supabase_client()
+    if client is None:
+        client = await get_supabase_client()
     result = await (
         client.table("documents")
         .select("*")
@@ -133,7 +137,9 @@ async def embed_with_retry(embeddings_model, batch, max_retries=5):
             raise
 
 
-async def count_stored_chunks(document_id: str, user_id: str) -> int:
+async def count_stored_chunks(
+    document_id: str, user_id: str, *, client: AsyncClient | None = None
+) -> int:
     """Return the number of embeddings already persisted for a document.
 
     Used by embed_and_store to resume an interrupted ingestion run without
@@ -146,7 +152,8 @@ async def count_stored_chunks(document_id: str, user_id: str) -> int:
     Returns:
         Number of rows currently in document_embeddings for this document.
     """
-    client = await get_supabase_client()
+    if client is None:
+        client = await get_supabase_client()
     result = (
         await client.table("document_embeddings")
         .select("id", count="exact")  # ty: ignore[invalid-argument-type]
@@ -162,6 +169,8 @@ async def embed_and_store(
     document_id: str,
     user_id: str,
     batch_size: int = 20,
+    *,
+    client: AsyncClient | None = None,
 ) -> None:
     """Generate embeddings for chunks and store them in Supabase batch-by-batch.
 
@@ -176,7 +185,7 @@ async def embed_and_store(
         user_id: UUID of the owning user.
         batch_size: Number of chunks to embed and insert per round-trip.
     """
-    already_stored = await count_stored_chunks(document_id, user_id)
+    already_stored = await count_stored_chunks(document_id, user_id, client=client)
     if already_stored:
         print(f"Resuming: skipping {already_stored} already-stored chunks.")
     remaining_chunks = chunks[already_stored:]
@@ -193,7 +202,8 @@ async def embed_and_store(
         output_dimensionality=EMBEDDING_DIMENSIONS,
     )
 
-    client = await get_supabase_client()
+    if client is None:
+        client = await get_supabase_client()
 
     requests_this_minute = 0
     tokens_this_minute = 0

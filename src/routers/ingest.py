@@ -1,7 +1,9 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from src.auth import get_access_token, get_current_user_id
+from src.db.client import get_authenticated_client
 from src.services.exceptions import DocumentNotFoundError, DownloadError
 from src.services.ingestion import (
     chunk_pdf,
@@ -17,7 +19,11 @@ router = APIRouter()
 
 
 @router.post("/ingest/{document_id}")
-async def ingest_document(document_id: str) -> dict[str, str | int]:
+async def ingest_document(
+    document_id: str,
+    user_id: str = Depends(get_current_user_id),
+    access_token: str = Depends(get_access_token),
+) -> dict[str, str | int]:
     """Ingest a document by downloading, chunking, and embedding it.
 
     Orchestrates the full ingestion pipeline for a document:
@@ -35,10 +41,9 @@ async def ingest_document(document_id: str) -> dict[str, str | int]:
         Dict with status and chunk count on success, or status on skip.
     """
     try:
-        # Hardcode a test user_id for now
-        user_id = "f9937aab-6c97-4c3e-a6f8-38f4a1676200"
+        auth_client = await get_authenticated_client(access_token)
 
-        doc = await get_document(document_id, user_id)
+        doc = await get_document(document_id, user_id, client=auth_client)
 
         if doc["ingested_at"]:
             return {"status": "already_ingested"}
@@ -46,7 +51,7 @@ async def ingest_document(document_id: str) -> dict[str, str | int]:
         pdf_bytes = await download_pdf(doc["blob_url"])
         chunks = chunk_pdf(pdf_bytes)
 
-        await embed_and_store(chunks, document_id, user_id)
+        await embed_and_store(chunks, document_id, user_id, client=auth_client)
         await mark_ingested(document_id)
 
         return {"status": "ingested", "chunk_count": len(chunks)}

@@ -9,6 +9,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from src.config import EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
 from src.schemas.chat import Citation, CitationsEvent, StreamEvent, TokenEvent
+from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,8 @@ async def retrieve_chunks(
     document_id: str,
     user_id: str,
     k: int = 5,
+    *,
+    client: AsyncClient | None = None,
 ) -> list[Document]:
     """Retrieve relevant chunks from Supabase vector store.
 
@@ -41,7 +44,8 @@ async def retrieve_chunks(
     query_embedding = await embeddings_model.aembed_query(query)
 
     # Query Supabase for similar chunks with filters
-    client = await get_supabase_client()
+    if client is None:
+        client = await get_supabase_client()
 
     # Use RPC function for similarity search with filter parameter
     result = await client.rpc(

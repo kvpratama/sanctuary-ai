@@ -77,3 +77,32 @@ async def test_close_supabase_client_clears_cached_client():
     await client_module.close_supabase_client()
 
     assert client_module._supabase_client is None
+
+
+async def test_get_authenticated_client_uses_anon_key():
+    """get_authenticated_client creates a client with the anon key and sets the user session."""
+    mock_settings = MagicMock()
+    mock_settings.supabase_url.get_secret_value.return_value = (
+        "https://test.supabase.co"
+    )
+    mock_settings.supabase_anon_key.get_secret_value.return_value = "test-anon-key"
+
+    mock_client = AsyncMock()
+
+    with (
+        patch("src.db.client.get_settings", return_value=mock_settings),
+        patch("src.db.client.acreate_client", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = mock_client
+
+        result = await client_module.get_authenticated_client("user-jwt-token")
+
+        mock_create.assert_called_once_with(
+            "https://test.supabase.co",
+            "test-anon-key",
+        )
+        mock_client.auth.set_session.assert_called_once_with(
+            access_token="user-jwt-token",
+            refresh_token="",
+        )
+        assert result is mock_client

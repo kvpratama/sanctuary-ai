@@ -2,9 +2,11 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
+from src.auth import get_access_token, get_current_user_id
+from src.db.client import get_authenticated_client
 from src.schemas.chat import ChatRequest, CitationsEvent
 from src.services.retrieval import retrieve_chunks, stream_answer_with_citations
 
@@ -21,6 +23,8 @@ router = APIRouter()
 async def chat(
     document_id: str,
     request: ChatRequest,
+    user_id: str = Depends(get_current_user_id),
+    access_token: str = Depends(get_access_token),
 ) -> EventSourceResponse:
     """Stream an answer about a document using RAG via Server-Sent Events.
 
@@ -34,14 +38,14 @@ async def chat(
     Raises:
         HTTPException: If document not found or retrieval fails.
     """
-    user_id = "f9937aab-6c97-4c3e-a6f8-38f4a1676200"
-
     try:
+        auth_client = await get_authenticated_client(access_token)
         chunks = await retrieve_chunks(
             query=request.message,
             document_id=document_id,
             user_id=user_id,
             k=5,
+            client=auth_client,
         )
     except Exception as e:
         logger.exception("Chat request failed for document %s", document_id)
