@@ -5,7 +5,6 @@ from pydantic import SecretStr
 
 from src.services.retrieval import (
     extract_citations,
-    generate_answer_with_citations,
     retrieve_chunks,
 )
 
@@ -111,18 +110,6 @@ def test_extract_citations_no_markers_returns_empty():
 def test_extract_citations_empty():
     """Test citation extraction with no chunks."""
     citations = extract_citations("Some answer [p. 1].", [])
-    assert citations == []
-
-
-@pytest.mark.asyncio
-async def test_generate_answer_with_no_chunks():
-    """Test generate_answer_with_citations with no chunks."""
-    answer, citations = await generate_answer_with_citations(
-        query="test question",
-        chunks=[],
-    )
-
-    assert "don't have enough information" in answer.lower()
     assert citations == []
 
 

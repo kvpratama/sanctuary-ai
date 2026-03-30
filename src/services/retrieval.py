@@ -97,65 +97,6 @@ def extract_citations(answer: str, chunks: list[Document]) -> list[Citation]:
     return [Citation(page=page) for page in valid_pages]
 
 
-async def generate_answer_with_citations(
-    query: str,
-    chunks: list[Document],
-) -> tuple[str, list[Citation]]:
-    """Generate an answer based on retrieved chunks with citations.
-
-    Args:
-        query: The user's question.
-        chunks: List of retrieved Document objects.
-
-    Returns:
-        Tuple of (answer_text, citations_list).
-    """
-    if not chunks:
-        return "I don't have enough information to answer that question.", []
-
-    # Build context from chunks with page references
-    context_parts = []
-    for chunk in chunks:
-        page = chunk.metadata.get("page", "unknown")
-        context_parts.append(f"[Page {page}]: {chunk.page_content}")
-
-    context = "\n\n".join(context_parts)
-
-    # Create prompt that constrains answer to retrieved content
-    prompt = f"""You are a helpful assistant that answers questions based ONLY on the provided document content. 
-Do not use any outside knowledge. If the answer cannot be found in the content, say so.
-
-Always cite your sources using [p. X] format where X is the page number.
-
-Question: {query}
-
-Context:
-{context}
-
-Answer:"""
-
-    # Initialize LLM using LangChain's init_chat_model
-    settings = get_settings()
-    llm = init_chat_model(
-        model=settings.llm_model,
-        model_provider=settings.llm_provider,
-        api_key=settings.openai_api_key.get_secret_value(),
-        base_url=settings.llm_provider_base_url,
-        temperature=0,
-        streaming=False,
-    )
-
-    response = await llm.ainvoke(prompt)
-    answer_content = response.content if hasattr(response, "content") else str(response)
-    answer: str = (
-        answer_content if isinstance(answer_content, str) else str(answer_content)
-    )
-
-    citations = extract_citations(answer, chunks)
-
-    return answer, citations
-
-
 async def stream_answer_with_citations(
     query: str,
     chunks: list[Document],
