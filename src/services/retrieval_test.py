@@ -150,16 +150,16 @@ async def test_stream_answer_with_citations_yields_tokens_then_citations():
         ):
             results.append(item)
 
-    # All items except the last are token strings
+    # All items except the last are TokenEvents
     tokens = results[:-1]
-    assert tokens == ["The author ", "argues that [p. 12]."]
+    assert all(e.type == "token" for e in tokens)
+    assert [e.token for e in tokens] == ["The author ", "argues that [p. 12]."]
 
-    # Last item is a tuple of citations
+    # Last item is a CitationsEvent
     final = results[-1]
-    assert isinstance(final, tuple)
-    citations = final[0]
-    assert len(citations) == 1
-    assert citations[0].page == 12
+    assert final.type == "citations"
+    assert len(final.citations) == 1
+    assert final.citations[0].page == 12
 
 
 @pytest.mark.asyncio
@@ -174,5 +174,9 @@ async def test_stream_answer_with_citations_no_chunks():
     ):
         results.append(item)
 
-    assert results[0] == "I don't have enough information to answer that question."
-    assert results[1] == ([],)
+    assert results[0].type == "token"
+    assert (
+        results[0].token == "I don't have enough information to answer that question."
+    )
+    assert results[1].type == "citations"
+    assert results[1].citations == []

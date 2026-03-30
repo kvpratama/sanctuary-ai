@@ -5,7 +5,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.app import app
-from src.schemas.chat import Citation
+from src.schemas.chat import Citation, CitationsEvent, TokenEvent
 
 
 def parse_sse_events(body: str) -> list[dict[str, str]]:
@@ -34,9 +34,9 @@ async def test_chat_stream_emits_token_citations_done():
     document_id = "test-doc-123"
 
     async def fake_stream(query, chunks):
-        yield "The author "
-        yield "argues that [p. 12]."
-        yield ([Citation(page=12)],)
+        yield TokenEvent(token="The author ")
+        yield TokenEvent(token="argues that [p. 12].")
+        yield CitationsEvent(citations=[Citation(page=12)])
 
     with (
         patch(
@@ -84,8 +84,8 @@ async def test_chat_stream_with_no_results():
     document_id = "test-doc-456"
 
     async def fake_stream(query, chunks):
-        yield "I don't have enough information."
-        yield ([],)
+        yield TokenEvent(token="I don't have enough information.")
+        yield CitationsEvent(citations=[])
 
     with (
         patch(
@@ -144,7 +144,7 @@ async def test_chat_stream_error_during_streaming():
     document_id = "test-doc-stream-err"
 
     async def failing_stream(query, chunks):
-        yield "partial token"
+        yield TokenEvent(token="partial token")
         raise RuntimeError("LLM connection lost")
 
     with (

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -11,6 +13,23 @@ class Citation(BaseModel):
     """A citation referencing a page number."""
 
     page: int = Field(..., description="Page number from the document")
+
+
+class TokenEvent(BaseModel):
+    """A streaming event carrying a single token."""
+
+    type: Literal["token"] = "token"
+    token: str
+
+
+class CitationsEvent(BaseModel):
+    """A streaming event carrying the final citations list."""
+
+    type: Literal["citations"] = "citations"
+    citations: list[Citation]
+
+
+StreamEvent = TokenEvent | CitationsEvent
 
 
 class ChatResponse(BaseModel):

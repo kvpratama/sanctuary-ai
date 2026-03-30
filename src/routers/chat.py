@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
-from src.schemas.chat import ChatRequest
+from src.schemas.chat import ChatRequest, CitationsEvent
 from src.services.retrieval import retrieve_chunks, stream_answer_with_citations
 
 logger = logging.getLogger(__name__)
@@ -44,16 +44,14 @@ async def chat(
 
     async def event_generator():
         try:
-            async for item in stream_answer_with_citations(
+            async for event in stream_answer_with_citations(
                 query=request.message,
                 chunks=chunks,
             ):
-                if isinstance(item, tuple):
-                    # Final sentinel: citations list
-                    citations = item[0]
+                if isinstance(event, CitationsEvent):
                     yield {
                         "event": "citations",
-                        "data": json.dumps([c.model_dump() for c in citations]),
+                        "data": json.dumps([c.model_dump() for c in event.citations]),
                     }
                     yield {
                         "event": "done",
@@ -62,7 +60,7 @@ async def chat(
                 else:
                     yield {
                         "event": "token",
-                        "data": json.dumps(item),
+                        "data": json.dumps(event.token),
                     }
         except Exception:
             logger.exception("Streaming failed for document %s", document_id)

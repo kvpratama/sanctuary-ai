@@ -8,7 +8,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from src.config import EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
-from src.schemas.chat import Citation
+from src.schemas.chat import Citation, CitationsEvent, StreamEvent, TokenEvent
 
 logger = logging.getLogger(__name__)
 
@@ -100,16 +100,18 @@ def extract_citations(answer: str, chunks: list[Document]) -> list[Citation]:
 async def stream_answer_with_citations(
     query: str,
     chunks: list[Document],
-) -> AsyncGenerator[str | tuple[list[Citation]], None]:
-    """Stream LLM answer tokens, then yield citations as a final sentinel.
+) -> AsyncGenerator[StreamEvent, None]:
+    """Stream LLM answer tokens, then yield a citations event.
 
     Yields:
-        str: Individual token strings as they arrive from the LLM.
-        tuple[list[Citation]]: Final item — a 1-tuple containing the citations list.
+        TokenEvent: Individual token strings as they arrive from the LLM.
+        CitationsEvent: Final item containing the citations list.
     """
     if not chunks:
-        yield "I don't have enough information to answer that question."
-        yield ([],)
+        yield TokenEvent(
+            token="I don't have enough information to answer that question."
+        )
+        yield CitationsEvent(citations=[])
         return
 
     # Build context (same logic as generate_answer_with_citations)
@@ -148,7 +150,7 @@ Answer:"""
         token: str = content if isinstance(content, str) else str(content)
         if token:
             full_answer += token
-            yield token
+            yield TokenEvent(token=token)
 
     citations = extract_citations(full_answer, chunks)
-    yield (citations,)
+    yield CitationsEvent(citations=citations)
