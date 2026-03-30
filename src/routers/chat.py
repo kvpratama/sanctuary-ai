@@ -13,7 +13,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/chat/{document_id}")
+@router.post(
+    "/chat/{document_id}",
+    response_class=EventSourceResponse,
+    responses={200: {"content": {"text/event-stream": {}}}},
+)
 async def chat(
     document_id: str,
     request: ChatRequest,
