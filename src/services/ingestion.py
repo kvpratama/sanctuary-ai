@@ -270,13 +270,17 @@ async def embed_and_store(
         await asyncio.sleep(5)
 
 
-async def mark_ingested(document_id: str) -> None:
+async def mark_ingested(
+    document_id: str, *, client: AsyncClient | None = None
+) -> None:
     """Mark a document as ingested by setting ingested_at to now.
 
     Args:
         document_id: UUID of the document to mark.
+        client: Optional authenticated Supabase client for RLS enforcement.
     """
-    client = await get_supabase_client()
+    if client is None:
+        client = await get_supabase_client()
     now = datetime.now(UTC).isoformat()
     await (
         client.table("documents")

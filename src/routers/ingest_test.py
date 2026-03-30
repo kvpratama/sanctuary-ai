@@ -86,7 +86,7 @@ async def test_ingest_document_success():
         mock_embed.assert_called_once_with(
             mock_chunks, document_id, USER_ID, client=mock_auth_client
         )
-        mock_mark.assert_called_once_with(document_id)
+        mock_mark.assert_called_once_with(document_id, client=mock_auth_client)
 
 
 @pytest.mark.asyncio
@@ -246,7 +246,7 @@ async def test_ingest_document_with_zero_chunks():
         mock_embed.assert_called_once_with(
             mock_chunks, document_id, USER_ID, client=mock_auth_client
         )
-        mock_mark.assert_called_once_with(document_id)
+        mock_mark.assert_called_once_with(document_id, client=mock_auth_client)
 
 
 @pytest.mark.asyncio

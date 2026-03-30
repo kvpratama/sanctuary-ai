@@ -52,7 +52,7 @@ async def ingest_document(
         chunks = chunk_pdf(pdf_bytes)
 
         await embed_and_store(chunks, document_id, user_id, client=auth_client)
-        await mark_ingested(document_id)
+        await mark_ingested(document_id, client=auth_client)
 
         return {"status": "ingested", "chunk_count": len(chunks)}
 
