@@ -12,49 +12,6 @@ from supabase import AsyncClient
 _bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def get_current_user_id(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
-) -> str:
-    """Extract and verify JWT, returning the user ID.
-
-    Args:
-        credentials: Bearer token from the Authorization header.
-
-    Returns:
-        The user ID (``sub`` claim) from the verified JWT.
-
-    Raises:
-        HTTPException: 401 if the token is missing, invalid, or expired.
-    """
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authentication token",
-        )
-
-    settings = get_settings()
-    try:
-        payload = pyjwt.decode(
-            credentials.credentials,
-            settings.supabase_jwt_secret.get_secret_value(),
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
-    except pyjwt.InvalidTokenError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-        ) from e
-
-    user_id: str | None = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token missing subject claim",
-        )
-    return user_id
-
-
 async def get_access_token(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> str:
@@ -75,6 +32,43 @@ async def get_access_token(
             detail="Missing authentication token",
         )
     return credentials.credentials
+
+
+async def get_current_user_id(
+    token: str = Depends(get_access_token),
+) -> str:
+    """Extract and verify JWT, returning the user ID.
+
+    Args:
+        token: Raw JWT access token string.
+
+    Returns:
+        The user ID (``sub`` claim) from the verified JWT.
+
+    Raises:
+        HTTPException: 401 if the token is missing, invalid, or expired.
+    """
+    settings = get_settings()
+    try:
+        payload = pyjwt.decode(
+            token,
+            settings.supabase_jwt_secret.get_secret_value(),
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+    except pyjwt.InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        ) from e
+
+    user_id: str | None = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing subject claim",
+        )
+    return user_id
 
 
 class AuthenticatedUser(BaseModel):
