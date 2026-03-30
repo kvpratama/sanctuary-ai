@@ -29,6 +29,8 @@ async def retrieve_chunks(
         document_id: UUID of the document to search within.
         user_id: UUID of the user (for authorization).
         k: Number of chunks to retrieve.
+        client: Optional Supabase client to reuse for requests. When provided,
+            this client is used instead of creating a new one via get_supabase_client.
 
     Returns:
         List of LangChain Document objects with page metadata.

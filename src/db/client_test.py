@@ -93,8 +93,40 @@ async def test_close_client_calls_individual_service_closers():
     mock_client.realtime.close.assert_called_once()
 
 
-async def test_get_authenticated_client_uses_anon_key() -> None:
-    """get_authenticated_client creates a client with the anon key and sets the user session."""
+async def test_get_authenticated_client_with_only_access_token() -> None:
+    """get_authenticated_client uses Authorization header when only access token is provided."""
+    mock_settings = MagicMock()
+    mock_settings.supabase_url.get_secret_value.return_value = (
+        "https://test.supabase.co"
+    )
+    mock_settings.supabase_anon_key.get_secret_value.return_value = "test-anon-key"
+
+    mock_client = AsyncMock()
+
+    with (
+        patch("src.db.client.get_settings", return_value=mock_settings),
+        patch("src.db.client.AsyncClientOptions") as mock_options_cls,
+        patch("src.db.client.acreate_client", new_callable=AsyncMock) as mock_create,
+    ):
+        mock_create.return_value = mock_client
+        mock_options_cls.return_value = "mocked-options"
+
+        result = await client_module.get_authenticated_client("user-jwt-token")
+
+        mock_options_cls.assert_called_once_with(
+            headers={"Authorization": "Bearer user-jwt-token"}
+        )
+        mock_create.assert_called_once_with(
+            "https://test.supabase.co",
+            "test-anon-key",
+            options="mocked-options",
+        )
+        mock_client.auth.set_session.assert_not_called()
+        assert result is mock_client
+
+
+async def test_get_authenticated_client_with_refresh_token() -> None:
+    """get_authenticated_client uses set_session when refresh token is provided."""
     mock_settings = MagicMock()
     mock_settings.supabase_url.get_secret_value.return_value = (
         "https://test.supabase.co"
@@ -109,14 +141,17 @@ async def test_get_authenticated_client_uses_anon_key() -> None:
     ):
         mock_create.return_value = mock_client
 
-        result = await client_module.get_authenticated_client("user-jwt-token")
+        result = await client_module.get_authenticated_client(
+            "user-jwt-token", "user-refresh-token"
+        )
 
         mock_create.assert_called_once_with(
             "https://test.supabase.co",
             "test-anon-key",
+            options=None,
         )
         mock_client.auth.set_session.assert_called_once_with(
             access_token="user-jwt-token",
-            refresh_token="",
+            refresh_token="user-refresh-token",
         )
         assert result is mock_client

@@ -1,4 +1,4 @@
-from typing import Any, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 import jwt as pyjwt
 from fastapi import Depends, HTTPException, status
@@ -8,6 +8,11 @@ from pydantic import BaseModel
 from src.config import get_settings
 from src.db.client import close_client, get_authenticated_client
 from supabase import AsyncClient
+
+if TYPE_CHECKING:
+    _AsyncClient = AsyncClient
+else:
+    _AsyncClient = Any
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -80,7 +85,7 @@ class AuthenticatedUser(BaseModel):
     """
 
     id: str
-    client: Any
+    client: _AsyncClient
 
     model_config = {"arbitrary_types_allowed": True}
 

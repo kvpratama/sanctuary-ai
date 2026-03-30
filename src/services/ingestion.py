@@ -185,6 +185,9 @@ async def embed_and_store(
         user_id: UUID of the owning user.
         batch_size: Number of chunks to embed and insert per round-trip.
     """
+    if client is None:
+        client = await get_supabase_client()
+
     already_stored = await count_stored_chunks(document_id, user_id, client=client)
     if already_stored:
         print(f"Resuming: skipping {already_stored} already-stored chunks.")
@@ -201,9 +204,6 @@ async def embed_and_store(
         task_type="RETRIEVAL_DOCUMENT",
         output_dimensionality=EMBEDDING_DIMENSIONS,
     )
-
-    if client is None:
-        client = await get_supabase_client()
 
     requests_this_minute = 0
     tokens_this_minute = 0

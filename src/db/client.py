@@ -1,5 +1,5 @@
 from src.config import get_settings
-from supabase import AsyncClient, acreate_client
+from supabase import AsyncClient, AsyncClientOptions, acreate_client
 
 _supabase_client: AsyncClient | None = None
 
@@ -44,7 +44,9 @@ async def close_supabase_client() -> None:
         _supabase_client = None
 
 
-async def get_authenticated_client(access_token: str) -> AsyncClient:
+async def get_authenticated_client(
+    access_token: str, refresh_token: str | None = None
+) -> AsyncClient:
     """Create a per-request Supabase client authenticated with the user's JWT.
 
     Uses the anon key (not the service-role key) so that Postgres RLS
@@ -52,14 +54,27 @@ async def get_authenticated_client(access_token: str) -> AsyncClient:
 
     Args:
         access_token: The user's Supabase JWT access token.
+        refresh_token: Optional refresh token for session maintenance.
 
     Returns:
         An AsyncClient with the user's session set.
     """
     settings = get_settings()
+    options = None
+    if not refresh_token:
+        options = AsyncClientOptions(
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+
     client = await acreate_client(
         settings.supabase_url.get_secret_value(),
         settings.supabase_anon_key.get_secret_value(),
+        options=options,
     )
-    await client.auth.set_session(access_token=access_token, refresh_token="")
+
+    if refresh_token:
+        await client.auth.set_session(
+            access_token=access_token, refresh_token=refresh_token
+        )
+
     return client

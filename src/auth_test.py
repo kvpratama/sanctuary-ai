@@ -1,6 +1,7 @@
 """Tests for JWT authentication dependency."""
 
 import time
+from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt as pyjwt
@@ -19,7 +20,7 @@ _test_app = FastAPI()
 
 
 @pytest.fixture(autouse=True)
-def _patch_jwt_secret():
+def _patch_jwt_secret() -> Generator:
     """Patch get_settings so the auth dependency uses our known secret."""
     mock_settings = MagicMock()
     mock_settings.supabase_jwt_secret = SecretStr(JWT_SECRET)
@@ -144,8 +145,7 @@ async def test_get_authenticated_user_yields_and_closes() -> None:
 
     user_id = "test-user"
     token = "test-token"
-    mock_client = MagicMock(spec=AsyncClient)
-    mock_client.__class__ = AsyncClient
+    mock_client = MagicMock()
 
     with (
         patch("src.auth.get_current_user_id", return_value=user_id),

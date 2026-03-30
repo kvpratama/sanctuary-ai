@@ -44,11 +44,13 @@ class TestGetDocument:
             return_value=mock_result
         )
 
-        from src.services.ingestion import get_document
+        with patch("src.services.ingestion.get_supabase_client") as mock_get_client:
+            from src.services.ingestion import get_document
 
-        result = await get_document("doc-1", "user-1", client=mock_client)
-        assert result == mock_result.data
-        mock_client.table.assert_called_once_with("documents")
+            result = await get_document("doc-1", "user-1", client=mock_client)
+            assert result == mock_result.data
+            mock_client.table.assert_called_once_with("documents")
+            mock_get_client.assert_not_called()
 
     async def test_raises_not_found_when_no_data(self):
         """Raises DocumentNotFoundError when document does not exist."""

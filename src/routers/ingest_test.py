@@ -1,5 +1,6 @@
 """Tests for the ingest router endpoints."""
 
+from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt as pyjwt
@@ -16,7 +17,7 @@ JWT_SECRET = "test-jwt-secret-for-auth-tests-minimum-32-bytes"
 
 
 @pytest.fixture(autouse=True)
-def _patch_jwt_secret():
+def _patch_jwt_secret() -> Generator[None, None, None]:
     """Patch get_settings so the auth dependency uses our known secret."""
     mock_settings = MagicMock()
     mock_settings.supabase_jwt_secret = SecretStr(JWT_SECRET)
