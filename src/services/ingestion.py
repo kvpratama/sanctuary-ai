@@ -270,9 +270,7 @@ async def embed_and_store(
         await asyncio.sleep(5)
 
 
-async def mark_ingested(
-    document_id: str, *, client: AsyncClient | None = None
-) -> None:
+async def mark_ingested(document_id: str, *, client: AsyncClient | None = None) -> None:
     """Mark a document as ingested by setting ingested_at to now.
 
     Args:

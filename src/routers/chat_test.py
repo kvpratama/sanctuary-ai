@@ -11,6 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
 
 from src.app import app
+from src.auth import get_authenticated_user
 from src.schemas.chat import Citation, CitationsEvent, TokenEvent
 
 USER_ID = "f9937aab-6c97-4c3e-a6f8-38f4a1676200"
@@ -76,32 +77,38 @@ async def test_chat_stream_emits_token_citations_done() -> None:
         yield TokenEvent(token="argues that [p. 12].")
         yield CitationsEvent(citations=[Citation(page=12)])
 
-    mock_auth_client = AsyncMock()
+    mock_auth_user = MagicMock()
+    mock_auth_user.id = USER_ID
+    mock_auth_user.client = AsyncMock()
 
-    with (
-        patch(
-            "src.routers.chat.get_authenticated_client", new_callable=AsyncMock
-        ) as mock_get_client,
-        patch(
-            "src.routers.chat.retrieve_chunks", new_callable=AsyncMock, return_value=[]
-        ) as mock_retrieve,
-        patch("src.routers.chat.stream_answer_with_citations", side_effect=fake_stream),
-    ):
-        mock_get_client.return_value = mock_auth_client
+    app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            lines: list[str] = []
-            async with client.stream(
-                "POST",
-                f"/chat/{document_id}",
-                json={"message": "What is the main argument?"},
-                headers={"Authorization": f"Bearer {_make_token()}"},
-            ) as response:
-                assert response.status_code == 200
-                assert "text/event-stream" in response.headers["content-type"]
-                async for line in response.aiter_lines():
-                    lines.append(line)
+    try:
+        with (
+            patch(
+                "src.routers.chat.retrieve_chunks",
+                new_callable=AsyncMock,
+                return_value=[],
+            ) as mock_retrieve,
+            patch(
+                "src.routers.chat.stream_answer_with_citations", side_effect=fake_stream
+            ),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                lines: list[str] = []
+                async with client.stream(
+                    "POST",
+                    f"/chat/{document_id}",
+                    json={"message": "What is the main argument?"},
+                    headers={"Authorization": f"Bearer {_make_token()}"},
+                ) as response:
+                    assert response.status_code == 200
+                    assert "text/event-stream" in response.headers["content-type"]
+                    async for line in response.aiter_lines():
+                        lines.append(line)
 
         events = parse_sse_events(lines)
         event_sequence = [(e["event"], json.loads(e["data"])) for e in events]
@@ -117,8 +124,10 @@ async def test_chat_stream_emits_token_citations_done() -> None:
             document_id=document_id,
             user_id=USER_ID,
             k=5,
-            client=mock_auth_client,
+            client=mock_auth_user.client,
         )
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -132,31 +141,37 @@ async def test_chat_stream_with_no_results() -> None:
         yield TokenEvent(token="I don't have enough information.")
         yield CitationsEvent(citations=[])
 
-    mock_auth_client = AsyncMock()
+    mock_auth_user = MagicMock()
+    mock_auth_user.id = USER_ID
+    mock_auth_user.client = AsyncMock()
 
-    with (
-        patch(
-            "src.routers.chat.get_authenticated_client", new_callable=AsyncMock
-        ) as mock_get_client,
-        patch(
-            "src.routers.chat.retrieve_chunks", new_callable=AsyncMock, return_value=[]
-        ) as mock_retrieve,
-        patch("src.routers.chat.stream_answer_with_citations", side_effect=fake_stream),
-    ):
-        mock_get_client.return_value = mock_auth_client
+    app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            lines: list[str] = []
-            async with client.stream(
-                "POST",
-                f"/chat/{document_id}",
-                json={"message": "Unknown topic"},
-                headers={"Authorization": f"Bearer {_make_token()}"},
-            ) as response:
-                assert response.status_code == 200
-                async for line in response.aiter_lines():
-                    lines.append(line)
+    try:
+        with (
+            patch(
+                "src.routers.chat.retrieve_chunks",
+                new_callable=AsyncMock,
+                return_value=[],
+            ) as mock_retrieve,
+            patch(
+                "src.routers.chat.stream_answer_with_citations", side_effect=fake_stream
+            ),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                lines: list[str] = []
+                async with client.stream(
+                    "POST",
+                    f"/chat/{document_id}",
+                    json={"message": "Unknown topic"},
+                    headers={"Authorization": f"Bearer {_make_token()}"},
+                ) as response:
+                    assert response.status_code == 200
+                    async for line in response.aiter_lines():
+                        lines.append(line)
 
         events = parse_sse_events(lines)
         event_sequence = [(e["event"], json.loads(e["data"])) for e in events]
@@ -171,36 +186,43 @@ async def test_chat_stream_with_no_results() -> None:
             document_id=document_id,
             user_id=USER_ID,
             k=5,
-            client=mock_auth_client,
+            client=mock_auth_user.client,
         )
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
 async def test_chat_stream_error_handling() -> None:
     """Test SSE endpoint error handling."""
     document_id = "test-doc-789"
-    mock_auth_client = AsyncMock()
+    mock_auth_user = MagicMock()
+    mock_auth_user.id = USER_ID
+    mock_auth_user.client = AsyncMock()
 
-    with (
-        patch(
-            "src.routers.chat.get_authenticated_client", new_callable=AsyncMock
-        ) as mock_get_client,
-        patch(
-            "src.routers.chat.retrieve_chunks",
-            new_callable=AsyncMock,
-            side_effect=Exception("Database error"),
-        ),
-    ):
-        mock_get_client.return_value = mock_auth_client
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
-                f"/chat/{document_id}",
-                json={"message": "Test question"},
-                headers={"Authorization": f"Bearer {_make_token()}"},
-            )
+    app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
-        assert response.status_code == 500
+    try:
+        with (
+            patch(
+                "src.routers.chat.retrieve_chunks",
+                new_callable=AsyncMock,
+                side_effect=Exception("Database error"),
+            ),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                response = await client.post(
+                    f"/chat/{document_id}",
+                    json={"message": "Test question"},
+                    headers={"Authorization": f"Bearer {_make_token()}"},
+                )
+
+            assert response.status_code == 500
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -214,32 +236,38 @@ async def test_chat_stream_error_during_streaming() -> None:
         yield TokenEvent(token="partial token")
         raise RuntimeError("LLM connection lost")
 
-    mock_auth_client = AsyncMock()
+    mock_auth_user = MagicMock()
+    mock_auth_user.id = USER_ID
+    mock_auth_user.client = AsyncMock()
 
-    with (
-        patch(
-            "src.routers.chat.get_authenticated_client", new_callable=AsyncMock
-        ) as mock_get_client,
-        patch(
-            "src.routers.chat.retrieve_chunks", new_callable=AsyncMock, return_value=[]
-        ) as mock_retrieve,
-        patch(
-            "src.routers.chat.stream_answer_with_citations", side_effect=failing_stream
-        ),
-    ):
-        mock_get_client.return_value = mock_auth_client
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            lines: list[str] = []
-            async with client.stream(
-                "POST",
-                f"/chat/{document_id}",
-                json={"message": "Test question"},
-                headers={"Authorization": f"Bearer {_make_token()}"},
-            ) as response:
-                assert response.status_code == 200
-                async for line in response.aiter_lines():
-                    lines.append(line)
+    app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
+
+    try:
+        with (
+            patch(
+                "src.routers.chat.retrieve_chunks",
+                new_callable=AsyncMock,
+                return_value=[],
+            ) as mock_retrieve,
+            patch(
+                "src.routers.chat.stream_answer_with_citations",
+                side_effect=failing_stream,
+            ),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                lines: list[str] = []
+                async with client.stream(
+                    "POST",
+                    f"/chat/{document_id}",
+                    json={"message": "Test question"},
+                    headers={"Authorization": f"Bearer {_make_token()}"},
+                ) as response:
+                    assert response.status_code == 200
+                    async for line in response.aiter_lines():
+                        lines.append(line)
 
         events = parse_sse_events(lines)
         event_sequence = [(e["event"], json.loads(e["data"])) for e in events]
@@ -254,8 +282,10 @@ async def test_chat_stream_error_during_streaming() -> None:
             document_id=document_id,
             user_id=USER_ID,
             k=5,
-            client=mock_auth_client,
+            client=mock_auth_user.client,
         )
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
