@@ -72,11 +72,25 @@ async def test_get_supabase_client_reuses_cached_client():
 
 async def test_close_supabase_client_clears_cached_client():
     """close_supabase_client resets the module-level reference."""
-    client_module._supabase_client = MagicMock()
+    client_module._supabase_client = AsyncMock()
 
     await client_module.close_supabase_client()
 
     assert client_module._supabase_client is None
+
+
+async def test_close_client_calls_individual_service_closers():
+    """close_client calls close/aclose on postgrest, auth, and realtime."""
+    mock_client = MagicMock()
+    mock_client.postgrest = AsyncMock()
+    mock_client.auth = AsyncMock()
+    mock_client.realtime = AsyncMock()
+
+    await client_module.close_client(mock_client)
+
+    mock_client.postgrest.aclose.assert_called_once()
+    mock_client.auth.close.assert_called_once()
+    mock_client.realtime.close.assert_called_once()
 
 
 async def test_get_authenticated_client_uses_anon_key() -> None:

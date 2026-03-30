@@ -1,4 +1,4 @@
-"""JWT authentication dependency for FastAPI."""
+from typing import Any, AsyncGenerator
 
 import jwt as pyjwt
 from fastapi import Depends, HTTPException, status
@@ -6,7 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from src.config import get_settings
-from src.db.client import get_authenticated_client
+from src.db.client import close_client, get_authenticated_client
 from supabase import AsyncClient
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -80,7 +80,7 @@ class AuthenticatedUser(BaseModel):
     """
 
     id: str
-    client: AsyncClient
+    client: Any
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -88,18 +88,22 @@ class AuthenticatedUser(BaseModel):
 async def get_authenticated_user(
     user_id: str = Depends(get_current_user_id),
     access_token: str = Depends(get_access_token),
-) -> AuthenticatedUser:
-    """FastAPI dependency that returns an authenticated user context.
+) -> AsyncGenerator[AuthenticatedUser, None]:
+    """FastAPI dependency that yields an authenticated user context.
 
     Combines user ID extraction, token retrieval, and Supabase client
-    authentication into a single object to reduce boilerplate in routers.
+    authentication into a single object. Uses a yield dependency to
+    ensure the per-request Supabase client is closed after the request.
 
     Args:
         user_id: The verified user ID from the JWT.
         access_token: The raw JWT access token.
 
-    Returns:
+    Yields:
         An AuthenticatedUser object with both ID and auth_client.
     """
     client = await get_authenticated_client(access_token)
-    return AuthenticatedUser(id=user_id, client=client)
+    try:
+        yield AuthenticatedUser(id=user_id, client=client)
+    finally:
+        await close_client(client)

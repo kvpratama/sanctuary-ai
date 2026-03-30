@@ -20,10 +20,28 @@ async def get_supabase_client() -> AsyncClient:
     return _supabase_client
 
 
+async def close_client(client: AsyncClient) -> None:
+    """Close the underlying HTTP clients for a Supabase AsyncClient.
+
+    Args:
+        client: The Supabase client to close.
+    """
+    # AsyncClient in supabase-py v2.x doesn't have a top-level aclose().
+    # We must close each service client that manages its own connection pool.
+    if hasattr(client, "postgrest"):
+        await client.postgrest.aclose()
+    if hasattr(client, "auth"):
+        await client.auth.close()
+    if hasattr(client, "realtime"):
+        await client.realtime.close()
+
+
 async def close_supabase_client() -> None:
-    """Reset the cached Supabase client reference."""
+    """Close the shared Supabase client and reset the reference."""
     global _supabase_client
-    _supabase_client = None
+    if _supabase_client is not None:
+        await close_client(_supabase_client)
+        _supabase_client = None
 
 
 async def get_authenticated_client(access_token: str) -> AsyncClient:
