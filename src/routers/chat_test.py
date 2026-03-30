@@ -8,12 +8,12 @@ from src.app import app
 from src.schemas.chat import Citation, CitationsEvent, TokenEvent
 
 
-def parse_sse_events(body: str) -> list[dict[str, str]]:
-    """Parse SSE formatted text into a list of {event, data} dicts."""
+def parse_sse_events(lines: list[str]) -> list[dict[str, str]]:
+    """Parse incremental SSE lines into a list of {event, data} dicts."""
     events = []
     current_event = None
     current_data = None
-    for raw_line in body.split("\n"):
+    for raw_line in lines:
         line = raw_line.strip()
         if line.startswith("event:"):
             current_event = line[len("event:") :].strip()
@@ -51,15 +51,18 @@ async def test_chat_stream_emits_token_citations_done():
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
+            lines: list[str] = []
+            async with client.stream(
+                "POST",
                 f"/chat/{document_id}",
                 json={"message": "What is the main argument?"},
-            )
+            ) as response:
+                assert response.status_code == 200
+                assert "text/event-stream" in response.headers["content-type"]
+                async for line in response.aiter_lines():
+                    lines.append(line)
 
-        assert response.status_code == 200
-        assert "text/event-stream" in response.headers["content-type"]
-
-        events = parse_sse_events(response.text)
+        events = parse_sse_events(lines)
 
         # Collect token events
         token_events = [e for e in events if e["event"] == "token"]
@@ -100,13 +103,17 @@ async def test_chat_stream_with_no_results():
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
+            lines: list[str] = []
+            async with client.stream(
+                "POST",
                 f"/chat/{document_id}",
                 json={"message": "Unknown topic"},
-            )
+            ) as response:
+                assert response.status_code == 200
+                async for line in response.aiter_lines():
+                    lines.append(line)
 
-        assert response.status_code == 200
-        events = parse_sse_events(response.text)
+        events = parse_sse_events(lines)
 
         token_events = [e for e in events if e["event"] == "token"]
         assert len(token_events) == 1
@@ -160,13 +167,17 @@ async def test_chat_stream_error_during_streaming():
     ):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
+            lines: list[str] = []
+            async with client.stream(
+                "POST",
                 f"/chat/{document_id}",
                 json={"message": "Test question"},
-            )
+            ) as response:
+                assert response.status_code == 200
+                async for line in response.aiter_lines():
+                    lines.append(line)
 
-        assert response.status_code == 200
-        events = parse_sse_events(response.text)
+        events = parse_sse_events(lines)
 
         token_events = [e for e in events if e["event"] == "token"]
         assert len(token_events) == 1
@@ -174,3 +185,6 @@ async def test_chat_stream_error_during_streaming():
         error_events = [e for e in events if e["event"] == "error"]
         assert len(error_events) == 1
         assert "detail" in json.loads(error_events[0]["data"])
+
+        done_events = [e for e in events if e["event"] == "done"]
+        assert len(done_events) == 1

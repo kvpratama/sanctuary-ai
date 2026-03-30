@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
@@ -42,7 +43,15 @@ async def chat(
         logger.exception("Chat request failed for document %s", document_id)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
-    async def event_generator():
+    async def event_generator() -> AsyncGenerator[dict[str, str], None]:
+        """Yield server-sent event dicts until the stream completes or the client disconnects.
+
+        Each yielded dict contains ``event`` (event type) and ``data`` (JSON payload)
+        keys conforming to the SSE protocol.
+
+        Yields:
+            A dict with ``event`` and ``data`` keys for each SSE frame.
+        """
         try:
             async for event in stream_answer_with_citations(
                 query=request.message,
@@ -69,6 +78,10 @@ async def chat(
                 "data": json.dumps(
                     {"detail": "An error occurred while generating the answer."}
                 ),
+            }
+            yield {
+                "event": "done",
+                "data": json.dumps({}),
             }
 
     return EventSourceResponse(event_generator())

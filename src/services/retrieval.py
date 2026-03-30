@@ -152,5 +152,10 @@ Answer:"""
             full_answer += token
             yield TokenEvent(token=token)
 
+    if not full_answer:
+        yield TokenEvent(
+            token="I don't have enough information to answer that question."
+        )
+
     citations = extract_citations(full_answer, chunks)
     yield CitationsEvent(citations=citations)

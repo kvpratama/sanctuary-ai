@@ -163,6 +163,51 @@ async def test_stream_answer_with_citations_yields_tokens_then_citations():
 
 
 @pytest.mark.asyncio
+async def test_stream_answer_empty_llm_response_yields_fallback_token():
+    """Test that an empty LLM stream emits the fallback token then CitationsEvent."""
+    from langchain_core.documents import Document
+
+    from src.services.retrieval import stream_answer_with_citations
+
+    chunks_input = [
+        Document(page_content="content a", metadata={"page": 3}),
+    ]
+
+    async def empty_astream(prompt):
+        return
+        yield  # noqa: RET504 — makes this an async generator
+
+    mock_settings = MagicMock()
+    mock_settings.llm_model = "gpt-4o-mini"
+    mock_settings.llm_provider = "openai"
+    mock_settings.openai_api_key = SecretStr("fake-key")
+    mock_settings.llm_provider_base_url = "https://api.openai.com/v1"
+
+    with (
+        patch("src.services.retrieval.get_settings", return_value=mock_settings),
+        patch("src.services.retrieval.init_chat_model") as mock_init,
+    ):
+        mock_llm = MagicMock()
+        mock_llm.astream = empty_astream
+        mock_init.return_value = mock_llm
+
+        results = []
+        async for item in stream_answer_with_citations(
+            query="anything",
+            chunks=chunks_input,
+        ):
+            results.append(item)
+
+    assert len(results) == 2
+    assert results[0].type == "token"
+    assert (
+        results[0].token == "I don't have enough information to answer that question."
+    )
+    assert results[1].type == "citations"
+    assert results[1].citations == []
+
+
+@pytest.mark.asyncio
 async def test_stream_answer_with_citations_no_chunks():
     """Test streaming with no chunks yields canned response and empty citations."""
     from src.services.retrieval import stream_answer_with_citations
