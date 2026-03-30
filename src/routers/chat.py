@@ -43,25 +43,34 @@ async def chat(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
     async def event_generator():
-        async for item in stream_answer_with_citations(
-            query=request.message,
-            chunks=chunks,
-        ):
-            if isinstance(item, tuple):
-                # Final sentinel: citations list
-                citations = item[0]
-                yield {
-                    "event": "citations",
-                    "data": json.dumps([c.model_dump() for c in citations]),
-                }
-                yield {
-                    "event": "done",
-                    "data": json.dumps({}),
-                }
-            else:
-                yield {
-                    "event": "token",
-                    "data": json.dumps(item),
-                }
+        try:
+            async for item in stream_answer_with_citations(
+                query=request.message,
+                chunks=chunks,
+            ):
+                if isinstance(item, tuple):
+                    # Final sentinel: citations list
+                    citations = item[0]
+                    yield {
+                        "event": "citations",
+                        "data": json.dumps([c.model_dump() for c in citations]),
+                    }
+                    yield {
+                        "event": "done",
+                        "data": json.dumps({}),
+                    }
+                else:
+                    yield {
+                        "event": "token",
+                        "data": json.dumps(item),
+                    }
+        except Exception:
+            logger.exception("Streaming failed for document %s", document_id)
+            yield {
+                "event": "error",
+                "data": json.dumps(
+                    {"detail": "An error occurred while generating the answer."}
+                ),
+            }
 
     return EventSourceResponse(event_generator())

@@ -136,3 +136,41 @@ async def test_chat_stream_error_handling():
             )
 
         assert response.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_error_during_streaming():
+    """Test SSE endpoint emits error event when streaming fails mid-stream."""
+    document_id = "test-doc-stream-err"
+
+    async def failing_stream(query, chunks):
+        yield "partial token"
+        raise RuntimeError("LLM connection lost")
+
+    with (
+        patch(
+            "src.routers.chat.retrieve_chunks",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "src.routers.chat.stream_answer_with_citations",
+            side_effect=failing_stream,
+        ),
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                f"/chat/{document_id}",
+                json={"message": "Test question"},
+            )
+
+        assert response.status_code == 200
+        events = parse_sse_events(response.text)
+
+        token_events = [e for e in events if e["event"] == "token"]
+        assert len(token_events) == 1
+
+        error_events = [e for e in events if e["event"] == "error"]
+        assert len(error_events) == 1
+        assert "detail" in json.loads(error_events[0]["data"])
