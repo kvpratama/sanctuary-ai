@@ -1,4 +1,5 @@
 import json
+from typing import AsyncGenerator, Union
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -12,28 +13,50 @@ def parse_sse_events(lines: list[str]) -> list[dict[str, str]]:
     """Parse incremental SSE lines into a list of {event, data} dicts."""
     events = []
     current_event = None
-    current_data = None
+    current_data: list[str] = []
     for raw_line in lines:
         line = raw_line.strip()
         if line.startswith("event:"):
             current_event = line[len("event:") :].strip()
+            current_data = []
         elif line.startswith("data:"):
-            current_data = line[len("data:") :].strip()
+            current_data.append(line[len("data:") :].strip())
         elif line == "" and current_event is not None:
-            events.append({"event": current_event, "data": current_data or ""})
+            events.append(
+                {
+                    "event": current_event,
+                    "data": "\n".join(current_data) if current_data else "",
+                }
+            )
             current_event = None
-            current_data = None
+            current_data = []
     if current_event is not None:
-        events.append({"event": current_event, "data": current_data or ""})
+        events.append(
+            {
+                "event": current_event,
+                "data": "\n".join(current_data) if current_data else "",
+            }
+        )
     return events
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_emits_token_citations_done():
+async def test_chat_stream_emits_token_citations_done() -> None:
     """Test SSE stream emits token events, then citations, then done."""
     document_id = "test-doc-123"
 
-    async def fake_stream(query, chunks):
+    async def fake_stream(
+        query: str, chunks: int
+    ) -> AsyncGenerator[Union[TokenEvent, CitationsEvent], None]:
+        """Fake streaming generator that yields token and citation events.
+
+        Args:
+            query: The user's query string (unused in fake implementation).
+            chunks: Number of chunks to retrieve (unused in fake implementation).
+
+        Yields:
+            TokenEvent instances for each token, followed by a CitationsEvent.
+        """
         yield TokenEvent(token="The author ")
         yield TokenEvent(token="argues that [p. 12].")
         yield CitationsEvent(citations=[Citation(page=12)])
@@ -64,29 +87,34 @@ async def test_chat_stream_emits_token_citations_done():
 
         events = parse_sse_events(lines)
 
-        # Collect token events
-        token_events = [e for e in events if e["event"] == "token"]
-        assert len(token_events) == 2
-        assert json.loads(token_events[0]["data"]) == "The author "
-        assert json.loads(token_events[1]["data"]) == "argues that [p. 12]."
-
-        # Citations event
-        citation_events = [e for e in events if e["event"] == "citations"]
-        assert len(citation_events) == 1
-        assert json.loads(citation_events[0]["data"]) == [{"page": 12}]
-
-        # Done event
-        done_events = [e for e in events if e["event"] == "done"]
-        assert len(done_events) == 1
-        assert json.loads(done_events[0]["data"]) == {}
+        # Assert ordered sequence of events
+        event_sequence = [(e["event"], json.loads(e["data"])) for e in events]
+        expected_sequence = [
+            ("token", "The author "),
+            ("token", "argues that [p. 12]."),
+            ("citations", [{"page": 12}]),
+            ("done", {}),
+        ]
+        assert event_sequence == expected_sequence
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_with_no_results():
+async def test_chat_stream_with_no_results() -> None:
     """Test SSE stream when no relevant chunks found."""
     document_id = "test-doc-456"
 
-    async def fake_stream(query, chunks):
+    async def fake_stream(
+        query: str, chunks: int
+    ) -> AsyncGenerator[Union[TokenEvent, CitationsEvent], None]:
+        """Fake streaming generator that yields token and empty citation events.
+
+        Args:
+            query: The user's query string (unused in fake implementation).
+            chunks: Number of chunks to retrieve (unused in fake implementation).
+
+        Yields:
+            TokenEvent instance followed by a CitationsEvent with empty citations.
+        """
         yield TokenEvent(token="I don't have enough information.")
         yield CitationsEvent(citations=[])
 
@@ -115,18 +143,18 @@ async def test_chat_stream_with_no_results():
 
         events = parse_sse_events(lines)
 
-        token_events = [e for e in events if e["event"] == "token"]
-        assert len(token_events) == 1
-
-        citation_events = [e for e in events if e["event"] == "citations"]
-        assert json.loads(citation_events[0]["data"]) == []
-
-        done_events = [e for e in events if e["event"] == "done"]
-        assert len(done_events) == 1
+        # Assert ordered sequence of events
+        event_sequence = [(e["event"], json.loads(e["data"])) for e in events]
+        expected_sequence = [
+            ("token", "I don't have enough information."),
+            ("citations", []),
+            ("done", {}),
+        ]
+        assert event_sequence == expected_sequence
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_error_handling():
+async def test_chat_stream_error_handling() -> None:
     """Test SSE endpoint error handling."""
     document_id = "test-doc-789"
 
@@ -146,11 +174,25 @@ async def test_chat_stream_error_handling():
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_error_during_streaming():
+async def test_chat_stream_error_during_streaming() -> None:
     """Test SSE endpoint emits error event when streaming fails mid-stream."""
     document_id = "test-doc-stream-err"
 
-    async def failing_stream(query, chunks):
+    async def failing_stream(
+        query: str, chunks: int
+    ) -> AsyncGenerator[TokenEvent, None]:
+        """Fake streaming generator that yields a token then raises an error.
+
+        Args:
+            query: The user's query string (unused in fake implementation).
+            chunks: Number of chunks to retrieve (unused in fake implementation).
+
+        Yields:
+            A single TokenEvent before raising RuntimeError.
+
+        Raises:
+            RuntimeError: Simulates LLM connection failure mid-stream.
+        """
         yield TokenEvent(token="partial token")
         raise RuntimeError("LLM connection lost")
 
@@ -179,12 +221,11 @@ async def test_chat_stream_error_during_streaming():
 
         events = parse_sse_events(lines)
 
-        token_events = [e for e in events if e["event"] == "token"]
-        assert len(token_events) == 1
-
-        error_events = [e for e in events if e["event"] == "error"]
-        assert len(error_events) == 1
-        assert "detail" in json.loads(error_events[0]["data"])
-
-        done_events = [e for e in events if e["event"] == "done"]
-        assert len(done_events) == 1
+        # Assert ordered sequence of events
+        event_sequence = [(e["event"], json.loads(e["data"])) for e in events]
+        expected_sequence = [
+            ("token", "partial token"),
+            ("error", {"detail": "An error occurred while generating the answer."}),
+            ("done", {}),
+        ]
+        assert event_sequence == expected_sequence
