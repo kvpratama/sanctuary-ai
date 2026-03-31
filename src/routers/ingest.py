@@ -42,6 +42,8 @@ async def ingest_document(
         doc = await get_document(document_id, user.id, client=user.client)
 
         if doc["ingested_at"]:
+            print("Document already ingested")
+            logger.info("Document %s already ingested", document_id)
             return {"status": "already_ingested"}
 
         pdf_bytes = await download_pdf(doc["blob_url"])

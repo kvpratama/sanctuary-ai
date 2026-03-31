@@ -18,7 +18,6 @@ class Settings(BaseSettings):
         Attributes:
             supabase_url: Supabase project URL.
             supabase_key: Supabase service key.
-            supabase_jwt_secret: Supabase JWT secret for authentication.
             openai_api_key: OpenAI API key for LLM access.
             gemini_api_key: Google Gemini API key for embeddings.
             bookified_blob_read_write_token: Token for blob storage access.
@@ -40,7 +39,6 @@ class Settings(BaseSettings):
     supabase_url: SecretStr
     supabase_key: SecretStr
     supabase_anon_key: SecretStr
-    supabase_jwt_secret: SecretStr
     openai_api_key: SecretStr
     gemini_api_key: SecretStr
     bookified_blob_read_write_token: SecretStr

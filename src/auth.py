@@ -1,8 +1,10 @@
+import asyncio
 from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 import jwt as pyjwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import PyJWKClient
 from pydantic import BaseModel
 
 from src.config import get_settings
@@ -15,6 +17,23 @@ else:
     _AsyncClient = Any
 
 _bearer_scheme = HTTPBearer(auto_error=False)
+_jwks_client: PyJWKClient | None = None
+
+
+def _get_jwks_client() -> PyJWKClient:
+    """Return a singleton PyJWKClient for fetching Supabase signing keys.
+
+    Returns:
+        A cached PyJWKClient instance.
+    """
+    global _jwks_client
+    if _jwks_client is None:
+        settings = get_settings()
+        url = (
+            f"{settings.supabase_url.get_secret_value()}/auth/v1/.well-known/jwks.json"
+        )
+        _jwks_client = PyJWKClient(url, cache_keys=True)
+    return _jwks_client
 
 
 async def get_access_token(
@@ -53,15 +72,18 @@ async def get_current_user_id(
     Raises:
         HTTPException: 401 if the token is missing, invalid, or expired.
     """
-    settings = get_settings()
+    jwks_client = _get_jwks_client()
     try:
+        signing_key = await asyncio.to_thread(
+            jwks_client.get_signing_key_from_jwt, token
+        )
         payload = pyjwt.decode(
             token,
-            settings.supabase_jwt_secret.get_secret_value(),
-            algorithms=["HS256"],
+            signing_key.key,
+            algorithms=["RS256", "ES256"],
             audience="authenticated",
         )
-    except pyjwt.InvalidTokenError as e:
+    except (pyjwt.InvalidTokenError, pyjwt.PyJWKClientError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",

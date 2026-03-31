@@ -21,7 +21,6 @@ def test_settings_loads_from_env(monkeypatch):
     """
     monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
     monkeypatch.setenv("SUPABASE_KEY", "test-key")
-    monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-jwt-secret")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setenv("BOOKIFIED_BLOB_READ_WRITE_TOKEN", "test-blob-token")
@@ -30,7 +29,6 @@ def test_settings_loads_from_env(monkeypatch):
 
     assert settings.supabase_url.get_secret_value() == "https://test.supabase.co"
     assert settings.supabase_key.get_secret_value() == "test-key"
-    assert settings.supabase_jwt_secret.get_secret_value() == "test-jwt-secret"
     assert settings.openai_api_key.get_secret_value() == "test-openai-key"
     assert settings.gemini_api_key.get_secret_value() == "test-gemini-key"
     assert (
@@ -47,7 +45,6 @@ def test_settings_default_values(monkeypatch):
     # Set required env vars
     monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
     monkeypatch.setenv("SUPABASE_KEY", "test-key")
-    monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-jwt-secret")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setenv("BOOKIFIED_BLOB_READ_WRITE_TOKEN", "test-blob-token")
@@ -76,7 +73,6 @@ def test_settings_custom_cors_origins(monkeypatch):
     """
     monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
     monkeypatch.setenv("SUPABASE_KEY", "test-key")
-    monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-jwt-secret")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setenv("BOOKIFIED_BLOB_READ_WRITE_TOKEN", "test-blob-token")
@@ -94,7 +90,6 @@ def test_settings_secret_str_type(monkeypatch):
     """
     monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
     monkeypatch.setenv("SUPABASE_KEY", "test-key")
-    monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-jwt-secret")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setenv("BOOKIFIED_BLOB_READ_WRITE_TOKEN", "test-blob-token")
@@ -103,7 +98,6 @@ def test_settings_secret_str_type(monkeypatch):
 
     assert isinstance(settings.supabase_url, SecretStr)
     assert isinstance(settings.supabase_key, SecretStr)
-    assert isinstance(settings.supabase_jwt_secret, SecretStr)
     assert isinstance(settings.openai_api_key, SecretStr)
     assert isinstance(settings.gemini_api_key, SecretStr)
     assert isinstance(settings.bookified_blob_read_write_token, SecretStr)
@@ -114,7 +108,6 @@ def test_settings_loads_supabase_anon_key(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
     monkeypatch.setenv("SUPABASE_KEY", "test-key")
     monkeypatch.setenv("SUPABASE_ANON_KEY", "test-anon-key")
-    monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-jwt")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini")
     monkeypatch.setenv("BOOKIFIED_BLOB_READ_WRITE_TOKEN", "test-blob")

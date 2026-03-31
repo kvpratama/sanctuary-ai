@@ -6,25 +6,30 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt as pyjwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
-from pydantic import SecretStr
 
 from src.auth import get_access_token, get_current_user_id
-from src.config import get_settings
 
-JWT_SECRET = "test-jwt-secret-for-auth-tests-minimum-32-bytes"
+_private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+_public_key = _private_key.public_key()
 
 # Minimal app that uses the dependency
 _test_app = FastAPI()
 
 
 @pytest.fixture(autouse=True)
-def _patch_jwt_secret() -> Generator:
-    """Patch get_settings so the auth dependency uses our known secret."""
-    mock_settings = MagicMock()
-    mock_settings.supabase_jwt_secret = SecretStr(JWT_SECRET)
-    with patch("src.auth.get_settings", return_value=mock_settings):
+def _patch_auth_dependencies() -> Generator:
+    """Patch the JWT signing key discovery so tests don't hit the network."""
+    mock_jwks_client = MagicMock()
+    mock_signing_key = MagicMock()
+    mock_signing_key.key = _public_key
+    mock_jwks_client.get_signing_key_from_jwt.return_value = mock_signing_key
+
+    with (
+        patch("src.auth._get_jwks_client", return_value=mock_jwks_client),
+    ):
         yield
 
 
@@ -65,13 +70,31 @@ async def test_invalid_token_returns_401() -> None:
 
 
 @pytest.mark.asyncio
+async def test_jwks_client_error_returns_401() -> None:
+    """Network failure fetching JWKS keys returns 401, not 500."""
+    mock_jwks_client = MagicMock()
+    mock_jwks_client.get_signing_key_from_jwt.side_effect = pyjwt.PyJWKClientError(
+        "Network error"
+    )
+
+    with patch("src.auth._get_jwks_client", return_value=mock_jwks_client):
+        transport = ASGITransport(app=_test_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(
+                "/protected",
+                headers={"Authorization": "Bearer some-token"},
+            )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_valid_token_returns_user_id() -> None:
     """Request with a valid JWT returns the user_id from 'sub' claim."""
     user_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
     token = pyjwt.encode(
         {"sub": user_id, "aud": "authenticated"},
-        JWT_SECRET,
-        algorithm="HS256",
+        _private_key,
+        algorithm="RS256",
     )
 
     transport = ASGITransport(app=_test_app)
@@ -89,8 +112,8 @@ async def test_expired_token_returns_401() -> None:
     """Request with an expired JWT returns 401."""
     token = pyjwt.encode(
         {"sub": "some-user", "aud": "authenticated", "exp": int(time.time()) - 10},
-        JWT_SECRET,
-        algorithm="HS256",
+        _private_key,
+        algorithm="RS256",
     )
 
     transport = ASGITransport(app=_test_app)
@@ -107,8 +130,8 @@ async def test_token_without_sub_returns_401() -> None:
     """JWT with no 'sub' claim returns 401."""
     token = pyjwt.encode(
         {"aud": "authenticated", "role": "authenticated"},
-        JWT_SECRET,
-        algorithm="HS256",
+        _private_key,
+        algorithm="RS256",
     )
 
     transport = ASGITransport(app=_test_app)
@@ -125,8 +148,8 @@ async def test_get_access_token_returns_raw_jwt() -> None:
     """get_access_token returns the raw JWT string."""
     raw_token = pyjwt.encode(
         {"sub": "user-123", "aud": "authenticated"},
-        JWT_SECRET,
-        algorithm="HS256",
+        _private_key,
+        algorithm="RS256",
     )
     transport = ASGITransport(app=_test_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

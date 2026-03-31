@@ -190,7 +190,11 @@ async def embed_and_store(
 
     already_stored = await count_stored_chunks(document_id, user_id, client=client)
     if already_stored:
-        print(f"Resuming: skipping {already_stored} already-stored chunks.")
+        print(
+            f"Resuming: skipping {already_stored} already-stored chunks out of {len(chunks)}."
+        )
+    else:
+        print(f"Starting ingestion for {len(chunks)} chunks.")
     remaining_chunks = chunks[already_stored:]
 
     if not remaining_chunks:

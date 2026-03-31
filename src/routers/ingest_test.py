@@ -1,44 +1,15 @@
 """Tests for the ingest router endpoints."""
 
-from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import jwt as pyjwt
 import pytest
 from httpx import ASGITransport, AsyncClient
-from pydantic import SecretStr
 
 from src.app import app
 from src.auth import get_authenticated_user
 from src.services.exceptions import DocumentNotFoundError, DownloadError
 
 USER_ID = "f9937aab-6c97-4c3e-a6f8-38f4a1676200"
-JWT_SECRET = "test-jwt-secret-for-auth-tests-minimum-32-bytes"
-
-
-@pytest.fixture(autouse=True)
-def _patch_jwt_secret() -> Generator[None, None, None]:
-    """Patch get_settings so the auth dependency uses our known secret."""
-    mock_settings = MagicMock()
-    mock_settings.supabase_jwt_secret = SecretStr(JWT_SECRET)
-    with patch("src.auth.get_settings", return_value=mock_settings):
-        yield
-
-
-def _make_token(user_id: str = USER_ID) -> str:
-    """Generate a test JWT token for the given user ID.
-
-    Args:
-        user_id: The user ID to encode in the token. Defaults to USER_ID.
-
-    Returns:
-        A JWT token string encoded with the test secret.
-    """
-    return pyjwt.encode(
-        {"sub": user_id, "aud": "authenticated"},
-        JWT_SECRET,
-        algorithm="HS256",
-    )
 
 
 @pytest.mark.asyncio
@@ -89,7 +60,7 @@ async def test_ingest_document_success() -> None:
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 response = await ac.post(
                     f"/ingest/{document_id}",
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 200
@@ -140,7 +111,7 @@ async def test_ingest_document_already_ingested():
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 response = await ac.post(
                     f"/ingest/{document_id}",
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 200
@@ -177,7 +148,7 @@ async def test_ingest_document_not_found():
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 response = await ac.post(
                     f"/ingest/{document_id}",
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 404
@@ -223,7 +194,7 @@ async def test_ingest_document_download_error():
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 response = await ac.post(
                     f"/ingest/{document_id}",
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 502
@@ -281,7 +252,7 @@ async def test_ingest_document_with_zero_chunks():
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 response = await ac.post(
                     f"/ingest/{document_id}",
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 200
