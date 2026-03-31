@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS "public"."documents" (
     "last_accessed" timestamp with time zone,
     "current_page" integer DEFAULT 0 NOT NULL,
     "ingested_at" timestamp with time zone,
+    "is_ingesting" boolean DEFAULT false NOT NULL,
     CONSTRAINT "documents_current_page_check" CHECK (("current_page" >= 0)),
     CONSTRAINT "documents_size_check" CHECK (("size" > 0))
 );

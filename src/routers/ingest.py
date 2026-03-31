@@ -9,7 +9,9 @@ from src.services.ingestion import (
     download_pdf,
     embed_and_store,
     get_document,
+    lock_document,
     mark_ingested,
+    set_is_ingesting,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,18 +48,29 @@ async def ingest_document(
             logger.info("Document %s already ingested", document_id)
             return {"status": "already_ingested"}
 
-        pdf_bytes = await download_pdf(doc["blob_url"])
-        chunks = chunk_pdf(pdf_bytes)
+        if not await lock_document(document_id, client=user.client):
+            logger.info("Ingestion already in progress for document %s", document_id)
+            return {"status": "already_ingesting"}
 
-        await embed_and_store(chunks, document_id, user.id, client=user.client)
-        await mark_ingested(document_id, client=user.client)
+        try:
+            pdf_bytes = await download_pdf(doc["blob_url"])
+            chunks = chunk_pdf(pdf_bytes)
 
-        return {"status": "ingested", "chunk_count": len(chunks)}
+            await embed_and_store(chunks, document_id, user.id, client=user.client)
+            await mark_ingested(document_id, client=user.client)
+
+            return {"status": "ingested", "chunk_count": len(chunks)}
+        finally:
+            # Ensure the flag is reset even if ingestion fails (or if already set by mark_ingested)
+            await set_is_ingesting(document_id, False, client=user.client)
 
     except DocumentNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except DownloadError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+    except HTTPException:
+        # Re-raise HTTPExceptions (e.g. 409 Conflict) as-is
+        raise
     except Exception as e:
         logger.exception("Ingestion failed for document %s", document_id)
         raise HTTPException(status_code=500, detail=str(e)) from e

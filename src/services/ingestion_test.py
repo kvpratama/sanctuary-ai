@@ -447,6 +447,69 @@ class TestMarkIngested:
         mock_client.table.assert_called_once_with("documents")
         update_arg = mock_client.table.return_value.update.call_args[0][0]
         assert update_arg["ingested_at"] == fake_now.isoformat()
+        assert update_arg["is_ingesting"] is False
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
             "id", "doc-1"
         )
+
+
+class TestLocking:
+    """Tests for start_ingestion/stop_ingestion/lock_document/set_is_ingesting."""
+
+    async def test_set_is_ingesting_true(self):
+        """set_is_ingesting sets is_ingesting to True."""
+        mock_client = MagicMock()
+        mock_client.table.return_value.update.return_value.eq.return_value.execute = (
+            AsyncMock()
+        )
+
+        from src.services.ingestion import set_is_ingesting
+
+        await set_is_ingesting("doc-1", True, client=mock_client)
+
+        mock_client.table.assert_called_once_with("documents")
+        mock_client.table.return_value.update.assert_called_once_with(
+            {"is_ingesting": True}
+        )
+
+    async def test_lock_document_success(self):
+        """lock_document returns True when atomic update succeeds."""
+        mock_client = MagicMock()
+        mock_result = MagicMock()
+        mock_result.data = [{"id": "doc-1"}]  # Simulation of updated row
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute = AsyncMock(
+            return_value=mock_result
+        )
+
+        from src.services.ingestion import lock_document
+
+        result = await lock_document("doc-1", client=mock_client)
+
+        assert result is True
+        mock_client.table.assert_called_with("documents")
+        mock_client.table.return_value.update.assert_called_with({"is_ingesting": True})
+        # Verify atomic filters
+        calls = mock_client.table.return_value.update.return_value.eq.call_args_list
+        assert calls[0][0] == ("id", "doc-1")
+        # second .eq() call
+        assert (
+            mock_client.table.return_value.update.return_value.eq.return_value.eq.call_args[
+                0
+            ]
+            == ("is_ingesting", False)
+        )
+
+    async def test_lock_document_fails_when_already_ingesting(self):
+        """lock_document returns False when atomic update fails (row already true)."""
+        mock_client = MagicMock()
+        mock_result = MagicMock()
+        mock_result.data = []  # No rows updated
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute = AsyncMock(
+            return_value=mock_result
+        )
+
+        from src.services.ingestion import lock_document
+
+        result = await lock_document("doc-1", client=mock_client)
+
+        assert result is False
