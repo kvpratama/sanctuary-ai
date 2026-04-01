@@ -102,7 +102,7 @@ def chunk_pdf(pdf_bytes: bytes) -> list[Document]:
     reader = PdfReader(io.BytesIO(pdf_bytes))
     documents: list[Document] = []
     for page_num, page in enumerate(reader.pages, start=1):
-        text = page.extract_text() or ""
+        text = (page.extract_text() or "").replace("\x00", "")
         if text.strip():
             documents.append(Document(page_content=text, metadata={"page": page_num}))
 

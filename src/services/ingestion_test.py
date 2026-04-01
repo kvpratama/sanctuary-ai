@@ -227,6 +227,22 @@ class TestChunkPdf:
         page_numbers = [int(chunk.metadata["page"]) for chunk in chunks]
         assert page_numbers == [1, 2]
 
+    def test_strips_null_bytes_from_extracted_text(self):
+        """Null bytes (\\u0000) in PDF text are stripped to avoid Postgres errors."""
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = "Hello\x00World"
+        mock_reader = MagicMock()
+        mock_reader.pages = [mock_page]
+
+        with patch("src.services.ingestion.PdfReader", return_value=mock_reader):
+            from src.services.ingestion import chunk_pdf
+
+            chunks = chunk_pdf(b"fake-pdf")
+
+        assert len(chunks) >= 1
+        for chunk in chunks:
+            assert "\x00" not in chunk.page_content
+
     def test_returns_empty_list_for_blank_pdf(self):
         """A PDF with no text content returns an empty list."""
         writer = PdfWriter()
