@@ -68,6 +68,7 @@ CREATE EXTENSION IF NOT EXISTS "vector" WITH SCHEMA "extensions";
 
 CREATE OR REPLACE FUNCTION "public"."get_sorted_documents"("search_query" "text" DEFAULT NULL::"text", "limit_count" integer DEFAULT NULL::integer, "offset_count" integer DEFAULT 0) RETURNS TABLE("id" "uuid", "name" "text", "author" "text", "thumbnail_url" "text", "upload_date" timestamp with time zone, "last_accessed" timestamp with time zone, "page_count" integer, "current_page" integer, "total_count" bigint)
     LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
     AS $$
 declare
   user_uuid uuid;
@@ -94,7 +95,7 @@ begin
         when d.last_accessed is not null then 1
         else 2
       end as sort_bucket
-    from documents d
+    from public.documents d
     where d.user_id = user_uuid
       and (
         search_query is null 
