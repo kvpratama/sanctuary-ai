@@ -472,7 +472,7 @@ class TestMarkIngested:
 class TestLocking:
     """Tests for start_ingestion/stop_ingestion/lock_document/set_is_ingesting."""
 
-    async def test_set_is_ingesting_true(self):
+    async def test_set_is_ingesting_true(self) -> None:
         """set_is_ingesting sets is_ingesting to True."""
         mock_client = MagicMock()
         mock_client.table.return_value.update.return_value.eq.return_value.execute = (
@@ -488,7 +488,7 @@ class TestLocking:
             {"is_ingesting": True}
         )
 
-    async def test_lock_document_success(self):
+    async def test_lock_document_success(self) -> None:
         """lock_document returns True when atomic update succeeds."""
         mock_client = MagicMock()
         mock_result = MagicMock()
@@ -515,7 +515,7 @@ class TestLocking:
             == ("is_ingesting", False)
         )
 
-    async def test_lock_document_fails_when_already_ingesting(self):
+    async def test_lock_document_fails_when_already_ingesting(self) -> None:
         """lock_document returns False when atomic update fails (row already true)."""
         mock_client = MagicMock()
         mock_result = MagicMock()
