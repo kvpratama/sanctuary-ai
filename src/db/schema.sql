@@ -66,6 +66,67 @@ CREATE EXTENSION IF NOT EXISTS "vector" WITH SCHEMA "extensions";
 
 
 
+CREATE OR REPLACE FUNCTION "public"."get_sorted_documents"("search_query" "text" DEFAULT NULL::"text", "limit_count" integer DEFAULT NULL::integer, "offset_count" integer DEFAULT 0) RETURNS TABLE("id" "uuid", "name" "text", "author" "text", "thumbnail_url" "text", "upload_date" timestamp with time zone, "last_accessed" timestamp with time zone, "page_count" integer, "current_page" integer, "total_count" bigint)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+declare
+  user_uuid uuid;
+begin
+  user_uuid := auth.uid();
+  
+  if user_uuid is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  return query
+  with filtered_docs as (
+    select 
+      d.id,
+      d.name,
+      d.author,
+      d.thumbnail_url,
+      d.upload_date,
+      d.last_accessed,
+      d.page_count,
+      d.current_page,
+      case 
+        when d.last_accessed is null and d.upload_date >= now() - interval '7 days' then 0
+        when d.last_accessed is not null then 1
+        else 2
+      end as sort_bucket
+    from documents d
+    where d.user_id = user_uuid
+      and (
+        search_query is null 
+        or d.name ilike '%' || search_query || '%'
+        or d.author ilike '%' || search_query || '%'
+      )
+  ),
+  total as (
+    select count(*) as cnt from filtered_docs
+  )
+  select 
+    f.id,
+    f.name,
+    f.author,
+    f.thumbnail_url,
+    f.upload_date,
+    f.last_accessed,
+    f.page_count,
+    f.current_page,
+    t.cnt as total_count
+  from filtered_docs f
+  cross join total t
+  order by f.sort_bucket, coalesce(f.last_accessed, f.upload_date) desc
+  limit limit_count
+  offset offset_count;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."get_sorted_documents"("search_query" "text", "limit_count" integer, "offset_count" integer) OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."match_document_embeddings"("query_embedding" "extensions"."vector", "filter" "jsonb" DEFAULT '{}'::"jsonb", "match_count" integer DEFAULT 5) RETURNS TABLE("id" "uuid", "content" "text", "metadata" "jsonb", "similarity" double precision)
     LANGUAGE "plpgsql"
     SET "search_path" TO 'extensions', 'public'
@@ -722,6 +783,12 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+
+
+
+GRANT ALL ON FUNCTION "public"."get_sorted_documents"("search_query" "text", "limit_count" integer, "offset_count" integer) TO "anon";
+GRANT ALL ON FUNCTION "public"."get_sorted_documents"("search_query" "text", "limit_count" integer, "offset_count" integer) TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_sorted_documents"("search_query" "text", "limit_count" integer, "offset_count" integer) TO "service_role";
 
 
 
