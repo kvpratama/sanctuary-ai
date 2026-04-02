@@ -1,44 +1,15 @@
 """Tests for the ingest router endpoints."""
 
-from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import jwt as pyjwt
 import pytest
 from httpx import ASGITransport, AsyncClient
-from pydantic import SecretStr
 
 from src.app import app
 from src.auth import get_authenticated_user
 from src.services.exceptions import DocumentNotFoundError, DownloadError
 
 USER_ID = "f9937aab-6c97-4c3e-a6f8-38f4a1676200"
-JWT_SECRET = "test-jwt-secret-for-auth-tests-minimum-32-bytes"
-
-
-@pytest.fixture(autouse=True)
-def _patch_jwt_secret() -> Generator[None, None, None]:
-    """Patch get_settings so the auth dependency uses our known secret."""
-    mock_settings = MagicMock()
-    mock_settings.supabase_jwt_secret = SecretStr(JWT_SECRET)
-    with patch("src.auth.get_settings", return_value=mock_settings):
-        yield
-
-
-def _make_token(user_id: str = USER_ID) -> str:
-    """Generate a test JWT token for the given user ID.
-
-    Args:
-        user_id: The user ID to encode in the token. Defaults to USER_ID.
-
-    Returns:
-        A JWT token string encoded with the test secret.
-    """
-    return pyjwt.encode(
-        {"sub": user_id, "aud": "authenticated"},
-        JWT_SECRET,
-        algorithm="HS256",
-    )
 
 
 @pytest.mark.asyncio
@@ -60,7 +31,7 @@ async def test_ingest_document_success() -> None:
 
     mock_auth_user = MagicMock()
     mock_auth_user.id = USER_ID
-    mock_auth_user.client = AsyncMock()
+    mock_auth_user.client = MagicMock()
 
     app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
@@ -79,17 +50,24 @@ async def test_ingest_document_success() -> None:
                 "src.routers.ingest.embed_and_store", new_callable=AsyncMock
             ) as mock_embed,
             patch(
+                "src.routers.ingest.lock_document", new_callable=AsyncMock
+            ) as mock_lock,
+            patch(
+                "src.routers.ingest.set_is_ingesting", new_callable=AsyncMock
+            ) as mock_reset,
+            patch(
                 "src.routers.ingest.mark_ingested", new_callable=AsyncMock
             ) as mock_mark,
         ):
             mock_get.return_value = mock_doc
+            mock_lock.return_value = True
             mock_download.return_value = mock_pdf_bytes
 
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 response = await ac.post(
                     f"/ingest/{document_id}",
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 200
@@ -100,12 +78,16 @@ async def test_ingest_document_success() -> None:
             mock_get.assert_called_once_with(
                 document_id, USER_ID, client=mock_auth_user.client
             )
+            mock_lock.assert_called_once_with(document_id, client=mock_auth_user.client)
             mock_download.assert_called_once_with(mock_doc["blob_url"])
             mock_chunk.assert_called_once_with(mock_pdf_bytes)
             mock_embed.assert_called_once_with(
                 mock_chunks, document_id, USER_ID, client=mock_auth_user.client
             )
             mock_mark.assert_called_once_with(document_id, client=mock_auth_user.client)
+            mock_reset.assert_called_once_with(
+                document_id, False, client=mock_auth_user.client
+            )
     finally:
         app.dependency_overrides.clear()
 
@@ -124,7 +106,7 @@ async def test_ingest_document_already_ingested():
 
     mock_auth_user = MagicMock()
     mock_auth_user.id = USER_ID
-    mock_auth_user.client = AsyncMock()
+    mock_auth_user.client = MagicMock()
 
     app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
@@ -140,7 +122,7 @@ async def test_ingest_document_already_ingested():
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 response = await ac.post(
                     f"/ingest/{document_id}",
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 200
@@ -161,7 +143,7 @@ async def test_ingest_document_not_found():
 
     mock_auth_user = MagicMock()
     mock_auth_user.id = USER_ID
-    mock_auth_user.client = AsyncMock()
+    mock_auth_user.client = MagicMock()
 
     app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
@@ -177,7 +159,7 @@ async def test_ingest_document_not_found():
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 response = await ac.post(
                     f"/ingest/{document_id}",
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 404
@@ -203,7 +185,7 @@ async def test_ingest_document_download_error():
 
     mock_auth_user = MagicMock()
     mock_auth_user.id = USER_ID
-    mock_auth_user.client = AsyncMock()
+    mock_auth_user.client = MagicMock()
 
     app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
@@ -215,15 +197,22 @@ async def test_ingest_document_download_error():
             patch(
                 "src.routers.ingest.download_pdf", new_callable=AsyncMock
             ) as mock_download,
+            patch(
+                "src.routers.ingest.lock_document", new_callable=AsyncMock
+            ) as mock_lock,
+            patch(
+                "src.routers.ingest.set_is_ingesting", new_callable=AsyncMock
+            ) as mock_reset,
         ):
             mock_get.return_value = mock_doc
+            mock_lock.return_value = True
             mock_download.side_effect = DownloadError(mock_doc["blob_url"], 403)
 
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 response = await ac.post(
                     f"/ingest/{document_id}",
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 502
@@ -232,6 +221,10 @@ async def test_ingest_document_download_error():
                 document_id, USER_ID, client=mock_auth_user.client
             )
             mock_download.assert_called_once_with(mock_doc["blob_url"])
+            mock_lock.assert_called_once_with(document_id, client=mock_auth_user.client)
+            mock_reset.assert_called_once_with(
+                document_id, False, client=mock_auth_user.client
+            )
     finally:
         app.dependency_overrides.clear()
 
@@ -252,7 +245,7 @@ async def test_ingest_document_with_zero_chunks():
 
     mock_auth_user = MagicMock()
     mock_auth_user.id = USER_ID
-    mock_auth_user.client = AsyncMock()
+    mock_auth_user.client = MagicMock()
 
     app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
@@ -271,17 +264,24 @@ async def test_ingest_document_with_zero_chunks():
                 "src.routers.ingest.embed_and_store", new_callable=AsyncMock
             ) as mock_embed,
             patch(
+                "src.routers.ingest.lock_document", new_callable=AsyncMock
+            ) as mock_lock,
+            patch(
+                "src.routers.ingest.set_is_ingesting", new_callable=AsyncMock
+            ) as mock_reset,
+            patch(
                 "src.routers.ingest.mark_ingested", new_callable=AsyncMock
             ) as mock_mark,
         ):
             mock_get.return_value = mock_doc
+            mock_lock.return_value = True
             mock_download.return_value = mock_pdf_bytes
 
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 response = await ac.post(
                     f"/ingest/{document_id}",
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 200
@@ -292,12 +292,16 @@ async def test_ingest_document_with_zero_chunks():
             mock_get.assert_called_once_with(
                 document_id, USER_ID, client=mock_auth_user.client
             )
+            mock_lock.assert_called_once_with(document_id, client=mock_auth_user.client)
             mock_download.assert_called_once_with(mock_doc["blob_url"])
             mock_chunk.assert_called_once_with(mock_pdf_bytes)
             mock_embed.assert_called_once_with(
                 mock_chunks, document_id, USER_ID, client=mock_auth_user.client
             )
             mock_mark.assert_called_once_with(document_id, client=mock_auth_user.client)
+            mock_reset.assert_called_once_with(
+                document_id, False, client=mock_auth_user.client
+            )
     finally:
         app.dependency_overrides.clear()
 
@@ -309,3 +313,50 @@ async def test_ingest_without_auth_returns_401():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         response = await ac.post("/ingest/some-doc-id")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_already_ingesting():
+    """Test ingestion fails when document is already being ingested."""
+    document_id = "test-doc-ingesting"
+
+    mock_doc = {
+        "id": document_id,
+        "user_id": USER_ID,
+        "blob_url": "https://example.com/test.pdf",
+        "ingested_at": None,
+        "is_ingesting": True,
+    }
+
+    mock_auth_user = MagicMock()
+    mock_auth_user.id = USER_ID
+    mock_auth_user.client = MagicMock()
+
+    app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
+
+    try:
+        with (
+            patch(
+                "src.routers.ingest.get_document", new_callable=AsyncMock
+            ) as mock_get,
+            patch(
+                "src.routers.ingest.lock_document", new_callable=AsyncMock
+            ) as mock_lock,
+        ):
+            mock_get.return_value = mock_doc
+            # Simulate lock failure (already ingesting)
+            mock_lock.return_value = False
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                response = await ac.post(
+                    f"/ingest/{document_id}",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "already_ingesting"
+
+            mock_lock.assert_called_once_with(document_id, client=mock_auth_user.client)
+    finally:
+        app.dependency_overrides.clear()

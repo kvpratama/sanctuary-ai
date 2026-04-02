@@ -1,46 +1,18 @@
 """Tests for the chat router endpoints."""
 
 import json
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator
 from typing import Union
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import jwt as pyjwt
 import pytest
 from httpx import ASGITransport, AsyncClient
-from pydantic import SecretStr
 
 from src.app import app
 from src.auth import get_authenticated_user
 from src.schemas.chat import Citation, CitationsEvent, TokenEvent
 
 USER_ID = "f9937aab-6c97-4c3e-a6f8-38f4a1676200"
-JWT_SECRET = "test-jwt-secret-for-auth-tests-minimum-32-bytes"
-
-
-@pytest.fixture(autouse=True)
-def _patch_jwt_secret() -> Generator[None, None, None]:
-    """Patch get_settings so the auth dependency uses our known JWT secret."""
-    mock_settings = MagicMock()
-    mock_settings.supabase_jwt_secret = SecretStr(JWT_SECRET)
-    with patch("src.auth.get_settings", return_value=mock_settings):
-        yield
-
-
-def _make_token(user_id: str = USER_ID) -> str:
-    """Generate a test JWT token for the given user ID.
-
-    Args:
-        user_id: The user ID to encode in the token. Defaults to USER_ID.
-
-    Returns:
-        A JWT token string encoded with the test secret.
-    """
-    return pyjwt.encode(
-        {"sub": user_id, "aud": "authenticated"},
-        JWT_SECRET,
-        algorithm="HS256",
-    )
 
 
 def parse_sse_events(lines: list[str]) -> list[dict[str, str]]:
@@ -112,7 +84,7 @@ async def test_chat_stream_emits_token_citations_done() -> None:
                     "POST",
                     f"/chat/{document_id}",
                     json={"message": "What is the main argument?"},
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 ) as response:
                     assert response.status_code == 200
                     assert "text/event-stream" in response.headers["content-type"]
@@ -176,7 +148,7 @@ async def test_chat_stream_with_no_results() -> None:
                     "POST",
                     f"/chat/{document_id}",
                     json={"message": "Unknown topic"},
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 ) as response:
                     assert response.status_code == 200
                     async for line in response.aiter_lines():
@@ -226,7 +198,7 @@ async def test_chat_stream_error_handling() -> None:
                 response = await client.post(
                     f"/chat/{document_id}",
                     json={"message": "Test question"},
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 )
 
             assert response.status_code == 500
@@ -272,7 +244,7 @@ async def test_chat_stream_error_during_streaming() -> None:
                     "POST",
                     f"/chat/{document_id}",
                     json={"message": "Test question"},
-                    headers={"Authorization": f"Bearer {_make_token()}"},
+                    headers={"Authorization": "Bearer fake-token"},
                 ) as response:
                     assert response.status_code == 200
                     async for line in response.aiter_lines():

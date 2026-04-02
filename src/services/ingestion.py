@@ -102,7 +102,7 @@ def chunk_pdf(pdf_bytes: bytes) -> list[Document]:
     reader = PdfReader(io.BytesIO(pdf_bytes))
     documents: list[Document] = []
     for page_num, page in enumerate(reader.pages, start=1):
-        text = page.extract_text() or ""
+        text = (page.extract_text() or "").replace("\x00", "")
         if text.strip():
             documents.append(Document(page_content=text, metadata={"page": page_num}))
 
@@ -190,7 +190,11 @@ async def embed_and_store(
 
     already_stored = await count_stored_chunks(document_id, user_id, client=client)
     if already_stored:
-        print(f"Resuming: skipping {already_stored} already-stored chunks.")
+        print(
+            f"Resuming: skipping {already_stored} already-stored chunks out of {len(chunks)}."
+        )
+    else:
+        print(f"Starting ingestion for {len(chunks)} chunks.")
     remaining_chunks = chunks[already_stored:]
 
     if not remaining_chunks:
@@ -282,7 +286,54 @@ async def mark_ingested(document_id: str, *, client: AsyncClient | None = None) 
     now = datetime.now(UTC).isoformat()
     await (
         client.table("documents")
-        .update({"ingested_at": now})
+        .update({"ingested_at": now, "is_ingesting": False})
         .eq("id", document_id)
         .execute()
     )
+
+
+async def set_is_ingesting(
+    document_id: str, is_ingesting: bool, *, client: AsyncClient | None = None
+) -> None:
+    """Set the is_ingesting flag for a document.
+
+    Args:
+        document_id: UUID of the document.
+        is_ingesting: New value for the flag.
+        client: Optional authenticated Supabase client.
+    """
+    if client is None:
+        client = await get_supabase_client()
+    await (
+        client.table("documents")
+        .update({"is_ingesting": is_ingesting})
+        .eq("id", document_id)
+        .execute()
+    )
+
+
+async def lock_document(document_id: str, *, client: AsyncClient | None = None) -> bool:
+    """Try to acquire a lock for ingestion by setting is_ingesting to True.
+
+    Uses an atomic update with a filter on is_ingesting=False to ensure only
+    one process can set it to True at a time.
+
+    Args:
+        document_id: UUID of the document to lock.
+        client: Optional authenticated Supabase client.
+
+    Returns:
+        True if the lock was acquired, False otherwise.
+    """
+    if client is None:
+        client = await get_supabase_client()
+
+    result = await (
+        client.table("documents")
+        .update({"is_ingesting": True})
+        .eq("id", document_id)
+        .eq("is_ingesting", False)
+        .execute()
+    )
+
+    return len(result.data) > 0

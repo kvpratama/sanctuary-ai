@@ -227,6 +227,22 @@ class TestChunkPdf:
         page_numbers = [int(chunk.metadata["page"]) for chunk in chunks]
         assert page_numbers == [1, 2]
 
+    def test_strips_null_bytes_from_extracted_text(self):
+        """Null bytes (\\u0000) in PDF text are stripped to avoid Postgres errors."""
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = "Hello\x00World"
+        mock_reader = MagicMock()
+        mock_reader.pages = [mock_page]
+
+        with patch("src.services.ingestion.PdfReader", return_value=mock_reader):
+            from src.services.ingestion import chunk_pdf
+
+            chunks = chunk_pdf(b"fake-pdf")
+
+        assert len(chunks) >= 1
+        for chunk in chunks:
+            assert "\x00" not in chunk.page_content
+
     def test_returns_empty_list_for_blank_pdf(self):
         """A PDF with no text content returns an empty list."""
         writer = PdfWriter()
@@ -447,6 +463,69 @@ class TestMarkIngested:
         mock_client.table.assert_called_once_with("documents")
         update_arg = mock_client.table.return_value.update.call_args[0][0]
         assert update_arg["ingested_at"] == fake_now.isoformat()
+        assert update_arg["is_ingesting"] is False
         mock_client.table.return_value.update.return_value.eq.assert_called_once_with(
             "id", "doc-1"
         )
+
+
+class TestLocking:
+    """Tests for start_ingestion/stop_ingestion/lock_document/set_is_ingesting."""
+
+    async def test_set_is_ingesting_true(self) -> None:
+        """set_is_ingesting sets is_ingesting to True."""
+        mock_client = MagicMock()
+        mock_client.table.return_value.update.return_value.eq.return_value.execute = (
+            AsyncMock()
+        )
+
+        from src.services.ingestion import set_is_ingesting
+
+        await set_is_ingesting("doc-1", True, client=mock_client)
+
+        mock_client.table.assert_called_once_with("documents")
+        mock_client.table.return_value.update.assert_called_once_with(
+            {"is_ingesting": True}
+        )
+
+    async def test_lock_document_success(self) -> None:
+        """lock_document returns True when atomic update succeeds."""
+        mock_client = MagicMock()
+        mock_result = MagicMock()
+        mock_result.data = [{"id": "doc-1"}]  # Simulation of updated row
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute = AsyncMock(
+            return_value=mock_result
+        )
+
+        from src.services.ingestion import lock_document
+
+        result = await lock_document("doc-1", client=mock_client)
+
+        assert result is True
+        mock_client.table.assert_called_with("documents")
+        mock_client.table.return_value.update.assert_called_with({"is_ingesting": True})
+        # Verify atomic filters
+        calls = mock_client.table.return_value.update.return_value.eq.call_args_list
+        assert calls[0][0] == ("id", "doc-1")
+        # second .eq() call
+        assert (
+            mock_client.table.return_value.update.return_value.eq.return_value.eq.call_args[
+                0
+            ]
+            == ("is_ingesting", False)
+        )
+
+    async def test_lock_document_fails_when_already_ingesting(self) -> None:
+        """lock_document returns False when atomic update fails (row already true)."""
+        mock_client = MagicMock()
+        mock_result = MagicMock()
+        mock_result.data = []  # No rows updated
+        mock_client.table.return_value.update.return_value.eq.return_value.eq.return_value.execute = AsyncMock(
+            return_value=mock_result
+        )
+
+        from src.services.ingestion import lock_document
+
+        result = await lock_document("doc-1", client=mock_client)
+
+        assert result is False

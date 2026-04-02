@@ -47,6 +47,7 @@ class PublicDocuments(BaseModel):
     current_page: int = Field(alias="current_page")
     id: uuid.UUID = Field(alias="id")
     ingested_at: Optional[datetime.datetime] = Field(alias="ingested_at")
+    is_ingesting: bool = Field(alias="is_ingesting")
     last_accessed: Optional[datetime.datetime] = Field(alias="last_accessed")
     name: str = Field(alias="name")
     page_count: Optional[int] = Field(alias="page_count")
@@ -61,6 +62,7 @@ class PublicDocumentsInsert(TypedDict):
     current_page: NotRequired[Annotated[int, Field(alias="current_page")]]
     id: NotRequired[Annotated[uuid.UUID, Field(alias="id")]]
     ingested_at: NotRequired[Annotated[Optional[datetime.datetime], Field(alias="ingested_at")]]
+    is_ingesting: NotRequired[Annotated[bool, Field(alias="is_ingesting")]]
     last_accessed: NotRequired[Annotated[Optional[datetime.datetime], Field(alias="last_accessed")]]
     name: Annotated[str, Field(alias="name")]
     page_count: NotRequired[Annotated[Optional[int], Field(alias="page_count")]]
@@ -75,6 +77,7 @@ class PublicDocumentsUpdate(TypedDict):
     current_page: NotRequired[Annotated[int, Field(alias="current_page")]]
     id: NotRequired[Annotated[uuid.UUID, Field(alias="id")]]
     ingested_at: NotRequired[Annotated[Optional[datetime.datetime], Field(alias="ingested_at")]]
+    is_ingesting: NotRequired[Annotated[bool, Field(alias="is_ingesting")]]
     last_accessed: NotRequired[Annotated[Optional[datetime.datetime], Field(alias="last_accessed")]]
     name: NotRequired[Annotated[str, Field(alias="name")]]
     page_count: NotRequired[Annotated[Optional[int], Field(alias="page_count")]]
