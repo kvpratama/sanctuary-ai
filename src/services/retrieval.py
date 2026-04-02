@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from src.config import EMBEDDING_DIMENSIONS, get_settings
@@ -128,17 +129,21 @@ async def stream_answer_with_citations(
 
     context = "\n\n".join(context_parts)
 
-    prompt = f"""You are a helpful assistant that answers questions based ONLY on the provided document content. 
-Do not use any outside knowledge. If the answer cannot be found in the content, say so.
-
-Always cite your sources using [p. X] format where X is the page number.
-
-Question: {query}
-
-Context:
-{context}
-
-Answer:"""
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "You are a helpful assistant that answers questions based ONLY on the "
+                "provided document content. Do not use any outside knowledge. If the "
+                "answer cannot be found in the content, say so.\n\n"
+                "Always cite your sources using [p. X] format where X is the page number.",
+            ),
+            (
+                "human",
+                "Question: {query}\n\nContext:\n{context}",
+            ),
+        ]
+    )
 
     settings = get_settings()
     llm = init_chat_model(
@@ -150,13 +155,22 @@ Answer:"""
         streaming=True,
     )
 
+    chain = prompt | llm
+
     full_answer = ""
-    async for chunk in llm.astream(prompt):
-        content = chunk.content if hasattr(chunk, "content") else str(chunk)
-        token: str = content if isinstance(content, str) else str(content)
-        if token:
-            full_answer += token
-            yield TokenEvent(token=token)
+    try:
+        async for chunk in chain.astream({"query": query, "context": context}):
+            content = chunk.content if hasattr(chunk, "content") else str(chunk)
+            token: str = content if isinstance(content, str) else str(content)
+            if token:
+                full_answer += token
+                yield TokenEvent(token=token)
+    except GeneratorExit:
+        logger.warning(
+            "Generator cancelled before completion, full_answer so far: %s",
+            full_answer[:100],
+        )
+        return
 
     if not full_answer:
         yield TokenEvent(
