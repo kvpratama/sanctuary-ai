@@ -32,6 +32,7 @@ async def main() -> None:
         data=dataset_name,
         evaluators=[correctness],
         experiment_prefix="sanctuary",
+        max_concurrency=1,
     )
 
     print(results)

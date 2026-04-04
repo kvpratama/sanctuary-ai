@@ -9,7 +9,7 @@ from langsmith import Client
 DATASET_NAME = "sanctuary"
 
 
-examples = [
+examples: list[dict] = [
     {
         "inputs": {
             "question": "How do I handle data distribution shifts in a live environment?",

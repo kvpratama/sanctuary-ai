@@ -1,10 +1,11 @@
 """Tests for the eval target function."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from langchain_core.documents import Document
 
+from src.eval.target import target
 from src.schemas.chat import Citation, CitationsEvent, TokenEvent
 
 
@@ -37,8 +38,6 @@ async def test_target_returns_expected_shape() -> None:
             side_effect=fake_stream,
         ),
     ):
-        from src.eval.target import target
-
         result = await target(
             {
                 "question": "What is the answer?",
@@ -97,8 +96,6 @@ async def test_target_with_no_chunks_returns_fallback() -> None:
             side_effect=fake_stream,
         ),
     ):
-        from src.eval.target import target
-
         result = await target(
             {
                 "question": "unknown",
