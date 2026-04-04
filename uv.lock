@@ -55,6 +55,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "langsmith" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "reportlab" },
@@ -81,6 +82,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "langsmith", specifier = ">=0.7.22" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "reportlab", specifier = ">=4.4.10" },

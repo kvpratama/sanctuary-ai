@@ -22,6 +22,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "langsmith>=0.7.22",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "reportlab>=4.4.10",
@@ -31,6 +32,10 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+addopts = "-m 'not integration'"
+markers = [
+    "integration: end-to-end tests requiring live services (Supabase, LLM, LangSmith)",
+]
 
 [build-system]
 requires = ["hatchling"]
