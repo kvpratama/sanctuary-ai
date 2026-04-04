@@ -32,7 +32,7 @@ def test_correctness_returns_true_when_grader_says_correct() -> None:
             reference_outputs={"answer": "4"},
         )
 
-    assert result is True
+    assert result == {"score": 1, "comment": "The answer matches."}
 
 
 def test_correctness_returns_false_when_grader_says_incorrect() -> None:
@@ -64,7 +64,7 @@ def test_correctness_returns_false_when_grader_says_incorrect() -> None:
             reference_outputs={"answer": "4"},
         )
 
-    assert result is False
+    assert result == {"score": 0, "comment": "The answer is wrong."}
 
 
 def test_correctness_uses_eval_api_key_when_set() -> None:
