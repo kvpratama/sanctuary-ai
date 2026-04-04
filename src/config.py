@@ -56,6 +56,16 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Eval-specific LLM configuration (used by src/eval/ only)
+    eval_llm_model: str = "gpt-4o-mini"
+    eval_llm_provider: str = "openai"
+    eval_llm_provider_base_url: str = "https://api.openai.com/v1"
+    eval_llm_api_key: SecretStr | None = None
+
+    # LangSmith configuration
+    langsmith_api_key: SecretStr | None = None
+    langsmith_project: str = "default"
+
 
 @lru_cache
 def get_settings() -> Settings:
