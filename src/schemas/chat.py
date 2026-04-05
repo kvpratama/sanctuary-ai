@@ -22,11 +22,18 @@ class TokenEvent(BaseModel):
     token: str
 
 
+class RetrievedChunk(BaseModel):
+    """A serialized retrieved chunk."""
+
+    page_content: str
+    page: int | None = None
+
+
 class ChunksEvent(BaseModel):
     """A streaming event carrying the retrieved document chunks."""
 
     type: Literal["chunks"] = "chunks"
-    chunks: list[dict] = Field(
+    chunks: list[RetrievedChunk] = Field(
         ..., description="Retrieved chunks with page_content and metadata"
     )
 

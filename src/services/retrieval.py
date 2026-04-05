@@ -13,6 +13,7 @@ from src.schemas.chat import (
     ChunksEvent,
     Citation,
     CitationsEvent,
+    RetrievedChunk,
     StreamEvent,
     TokenEvent,
 )
@@ -222,7 +223,7 @@ async def stream_rag_pipeline(
 
     yield ChunksEvent(
         chunks=[
-            {"page_content": c.page_content, "page": c.metadata.get("page")}
+            RetrievedChunk(page_content=c.page_content, page=c.metadata.get("page"))
             for c in chunks
         ]
     )

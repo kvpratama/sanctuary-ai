@@ -4,7 +4,13 @@ import pytest
 from langchain_core.documents import Document
 from pydantic import SecretStr
 
-from src.schemas.chat import ChunksEvent, Citation, CitationsEvent, TokenEvent
+from src.schemas.chat import (
+    ChunksEvent,
+    Citation,
+    CitationsEvent,
+    RetrievedChunk,
+    TokenEvent,
+)
 from src.services.retrieval import (
     extract_citations,
     retrieve_chunks,
@@ -313,6 +319,7 @@ async def test_stream_rag_pipeline_yields_events():
             side_effect=fake_stream,
         ),
     ):
+        mock_client = AsyncMock()
         results = [
             event
             async for event in stream_rag_pipeline(
@@ -320,7 +327,7 @@ async def test_stream_rag_pipeline_yields_events():
                 document_id="doc-1",
                 user_id="user-1",
                 k=3,
-                client=AsyncMock(),
+                client=mock_client,
             )
         ]
 
@@ -329,7 +336,7 @@ async def test_stream_rag_pipeline_yields_events():
     # First event is ChunksEvent with retrieved documents
     assert isinstance(results[0], ChunksEvent)
     assert results[0].chunks == [
-        {"page_content": "chunk one", "page": 1},
+        RetrievedChunk(page_content="chunk one", page=1),
     ]
 
     # Then token events and citations
@@ -339,4 +346,10 @@ async def test_stream_rag_pipeline_yields_events():
     assert results[3].citations == [Citation(page=1)]
 
     # Verify retrieve_chunks was called with forwarded args
-    mock_retrieve.assert_called_once()
+    mock_retrieve.assert_called_once_with(
+        query="Hi",
+        document_id="doc-1",
+        user_id="user-1",
+        k=3,
+        client=mock_client,
+    )

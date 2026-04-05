@@ -7,7 +7,13 @@ from unittest.mock import patch
 import pytest
 
 from src.eval.target import target
-from src.schemas.chat import ChunksEvent, Citation, CitationsEvent, TokenEvent
+from src.schemas.chat import (
+    ChunksEvent,
+    Citation,
+    CitationsEvent,
+    RetrievedChunk,
+    TokenEvent,
+)
 
 StreamEvent = Union[ChunksEvent, TokenEvent, CitationsEvent]
 
@@ -21,8 +27,8 @@ async def test_target_returns_expected_shape() -> None:
     ) -> AsyncGenerator[StreamEvent, None]:
         yield ChunksEvent(
             chunks=[
-                {"page_content": "chunk one", "page": 1},
-                {"page_content": "chunk two", "page": 3},
+                RetrievedChunk(page_content="chunk one", page=1),
+                RetrievedChunk(page_content="chunk two", page=3),
             ]
         )
         yield TokenEvent(token="The answer is ")
@@ -43,8 +49,8 @@ async def test_target_returns_expected_shape() -> None:
     assert isinstance(result, dict)
     assert result["answer"] == "The answer is 42 [p. 1]."
     assert result["documents"] == [
-        {"page_content": "chunk one", "page": 1},
-        {"page_content": "chunk two", "page": 3},
+        RetrievedChunk(page_content="chunk one", page=1),
+        RetrievedChunk(page_content="chunk two", page=3),
     ]
     assert result["citations"] == [{"page": 1}]
 

@@ -4,7 +4,7 @@ Wraps the RAG pipeline into the dict-in / dict-out shape that
 ``langsmith.evaluate()`` expects.
 """
 
-from src.schemas.chat import ChunksEvent, CitationsEvent, TokenEvent
+from src.schemas.chat import ChunksEvent, CitationsEvent, RetrievedChunk, TokenEvent
 from src.services.retrieval import stream_rag_pipeline
 
 
@@ -19,7 +19,7 @@ async def target(inputs: dict) -> dict:
         and ``citations`` (list of dicts).
     """
     answer_parts: list[str] = []
-    documents: list[dict] = []
+    documents: list[RetrievedChunk] = []
     citation_pages: list[dict] = []
 
     async for event in stream_rag_pipeline(
