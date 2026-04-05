@@ -113,11 +113,13 @@ def ensure_dataset(client: Client | None = None) -> str:
         ex.metadata.get("external_id"): ex for ex in existing_examples if ex.metadata
     }
 
-    existed, updated, new_examples = [], [], []
+    existed, updated, new_examples, deleted = [], [], [], []
 
     # 3. Iterate through your local examples to create/update
+    local_external_ids: set[str | None] = set()
     for ex in examples:
         external_id = ex["metadata"]["external_id"]
+        local_external_ids.add(external_id)
         current_hash = get_content_hash(ex["inputs"], ex["outputs"])
 
         # Merge your external ID with the hash for tracking
@@ -151,9 +153,16 @@ def ensure_dataset(client: Client | None = None) -> str:
             )
             new_examples.append(ex)
 
+    # 4. Delete remote examples that no longer exist locally
+    for external_id, existing_ex in existing_map.items():
+        if external_id not in local_external_ids:
+            client.delete_example(example_id=existing_ex.id)
+            deleted.append(existing_ex)
+
     print(
         f"Updated {len(updated)} examples, \n"
-        f"created {len(new_examples)} new examples, and \n"
+        f"created {len(new_examples)} new examples, \n"
+        f"deleted {len(deleted)} examples, and \n"
         f"found {len(existed)} existing examples.\n"
     )
 
