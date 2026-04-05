@@ -1,5 +1,6 @@
 """Tests for the eval correctness evaluator."""
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -8,14 +9,14 @@ from langsmith.schemas import Example, Run
 from src.eval.evaluators import correctness
 
 
-def _make_run(outputs: dict) -> Run:
+def _make_run(outputs: dict[str, Any]) -> Run:
     """Create a minimal mock Run with the given outputs."""
     run = MagicMock(spec=Run)
     run.outputs = outputs
     return run
 
 
-def _make_example(inputs: dict, outputs: dict) -> Example:
+def _make_example(inputs: dict[str, Any], outputs: dict[str, Any]) -> Example:
     """Create a minimal mock Example with the given inputs/outputs."""
     example = MagicMock(spec=Example)
     example.inputs = inputs
@@ -77,6 +78,11 @@ async def test_correctness_uses_eval_api_key_when_set() -> None:
 
     mock_llm = MagicMock()
     mock_llm.with_structured_output.return_value = MagicMock()
+
+    # Clear the global get_settings cache so prior calls don't leak into this test.
+    from src.config import get_settings
+
+    get_settings.cache_clear()
 
     with (
         patch("src.eval.evaluators.get_settings", return_value=mock_settings),
