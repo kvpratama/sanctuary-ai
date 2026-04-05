@@ -1,11 +1,20 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from langchain_core.documents import Document
 from pydantic import SecretStr
 
+from src.schemas.chat import (
+    ChunksEvent,
+    Citation,
+    CitationsEvent,
+    RetrievedChunk,
+    TokenEvent,
+)
 from src.services.retrieval import (
     extract_citations,
     retrieve_chunks,
+    stream_rag_pipeline,
 )
 
 
@@ -280,3 +289,67 @@ async def test_stream_answer_with_citations_no_chunks():
     )
     assert results[1].type == "citations"
     assert results[1].citations == []
+
+
+@pytest.mark.asyncio
+async def test_stream_rag_pipeline_yields_events():
+    """stream_rag_pipeline retrieves chunks then yields stream events."""
+    mock_chunks = [
+        Document(page_content="chunk one", metadata={"page": 1}),
+    ]
+
+    fake_events = [
+        TokenEvent(token="Hello "),
+        TokenEvent(token="world."),
+        CitationsEvent(citations=[Citation(page=1)]),
+    ]
+
+    async def fake_stream(query: str, chunks: list[Document]):
+        for event in fake_events:
+            yield event
+
+    with (
+        patch(
+            "src.services.retrieval.retrieve_chunks",
+            new_callable=AsyncMock,
+            return_value=mock_chunks,
+        ) as mock_retrieve,
+        patch(
+            "src.services.retrieval.stream_answer_with_citations",
+            side_effect=fake_stream,
+        ),
+    ):
+        mock_client = AsyncMock()
+        results = [
+            event
+            async for event in stream_rag_pipeline(
+                query="Hi",
+                document_id="doc-1",
+                user_id="user-1",
+                k=3,
+                client=mock_client,
+            )
+        ]
+
+    assert len(results) == 4
+
+    # First event is ChunksEvent with retrieved documents
+    assert isinstance(results[0], ChunksEvent)
+    assert results[0].chunks == [
+        RetrievedChunk(page_content="chunk one", page=1),
+    ]
+
+    # Then token events and citations
+    assert results[1] == TokenEvent(token="Hello ")
+    assert results[2] == TokenEvent(token="world.")
+    assert isinstance(results[3], CitationsEvent)
+    assert results[3].citations == [Citation(page=1)]
+
+    # Verify retrieve_chunks was called with forwarded args
+    mock_retrieve.assert_called_once_with(
+        query="Hi",
+        document_id="doc-1",
+        user_id="user-1",
+        k=3,
+        client=mock_client,
+    )

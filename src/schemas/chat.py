@@ -22,6 +22,22 @@ class TokenEvent(BaseModel):
     token: str
 
 
+class RetrievedChunk(BaseModel):
+    """A serialized retrieved chunk."""
+
+    page_content: str
+    page: int | None = None
+
+
+class ChunksEvent(BaseModel):
+    """A streaming event carrying the retrieved document chunks."""
+
+    type: Literal["chunks"] = "chunks"
+    chunks: list[RetrievedChunk] = Field(
+        ..., description="Retrieved chunks with page_content and metadata"
+    )
+
+
 class CitationsEvent(BaseModel):
     """A streaming event carrying the final citations list."""
 
@@ -29,7 +45,7 @@ class CitationsEvent(BaseModel):
     citations: list[Citation]
 
 
-StreamEvent = TokenEvent | CitationsEvent
+StreamEvent = TokenEvent | CitationsEvent | ChunksEvent
 
 
 class ChatResponse(BaseModel):

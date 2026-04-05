@@ -2,12 +2,12 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sse_starlette.sse import EventSourceResponse
 
 from src.auth import AuthenticatedUser, get_authenticated_user
-from src.schemas.chat import ChatRequest, CitationsEvent
-from src.services.retrieval import retrieve_chunks, stream_answer_with_citations
+from src.schemas.chat import ChatRequest, ChunksEvent, CitationsEvent
+from src.services.retrieval import stream_rag_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -32,21 +32,7 @@ async def chat(
 
     Returns:
         EventSourceResponse streaming token, citations, and done events.
-
-    Raises:
-        HTTPException: If document not found or retrieval fails.
     """
-    try:
-        chunks = await retrieve_chunks(
-            query=request.message,
-            document_id=document_id,
-            user_id=user.id,
-            k=5,
-            client=user.client,
-        )
-    except Exception as e:
-        logger.exception("Chat request failed for document %s", document_id)
-        raise HTTPException(status_code=500, detail=str(e)) from e
 
     async def event_generator() -> AsyncGenerator[dict[str, str], None]:
         """Yield server-sent event dicts until the stream completes or the client disconnects.
@@ -58,11 +44,16 @@ async def chat(
             A dict with ``event`` and ``data`` keys for each SSE frame.
         """
         try:
-            async for event in stream_answer_with_citations(
+            async for event in stream_rag_pipeline(
                 query=request.message,
-                chunks=chunks,
+                document_id=document_id,
+                user_id=user.id,
+                k=5,
+                client=user.client,
             ):
-                if isinstance(event, CitationsEvent):
+                if isinstance(event, ChunksEvent):
+                    continue
+                elif isinstance(event, CitationsEvent):
                     yield {
                         "event": "citations",
                         "data": json.dumps([c.model_dump() for c in event.citations]),

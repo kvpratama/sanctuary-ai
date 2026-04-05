@@ -9,7 +9,14 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from src.config import EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
-from src.schemas.chat import Citation, CitationsEvent, StreamEvent, TokenEvent
+from src.schemas.chat import (
+    ChunksEvent,
+    Citation,
+    CitationsEvent,
+    RetrievedChunk,
+    StreamEvent,
+    TokenEvent,
+)
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
@@ -179,3 +186,47 @@ async def stream_answer_with_citations(
 
     citations = extract_citations(full_answer, chunks)
     yield CitationsEvent(citations=citations)
+
+
+async def stream_rag_pipeline(
+    query: str,
+    document_id: str,
+    user_id: str,
+    k: int = 5,
+    *,
+    client: AsyncClient | None = None,
+) -> AsyncGenerator[StreamEvent, None]:
+    """Retrieve chunks then stream the LLM answer with citations.
+
+    Eagerly calls ``retrieve_chunks``, then yields ``StreamEvent`` items
+    from ``stream_answer_with_citations``.  This is the single entry point
+    for the full RAG pipeline — used by both the chat router (streaming)
+    and the eval target (drained to collect the final result).
+
+    Args:
+        query: The user's question.
+        document_id: UUID of the document to search within.
+        user_id: UUID of the user (for authorization).
+        k: Number of chunks to retrieve.
+        client: Optional Supabase client to reuse for requests.
+
+    Yields:
+        ChunksEvent with retrieved documents, then TokenEvent and CitationsEvent.
+    """
+    chunks = await retrieve_chunks(
+        query=query,
+        document_id=document_id,
+        user_id=user_id,
+        k=k,
+        client=client,
+    )
+
+    yield ChunksEvent(
+        chunks=[
+            RetrievedChunk(page_content=c.page_content, page=c.metadata.get("page"))
+            for c in chunks
+        ]
+    )
+
+    async for event in stream_answer_with_citations(query=query, chunks=chunks):
+        yield event

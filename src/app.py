@@ -42,7 +42,7 @@ async def read_root() -> dict[str, str]:
     Returns:
         A dictionary containing the API message.
     """
-    return {"message": "Bookified API"}
+    return {"message": "Sanctuary AI"}
 
 
 @app.get("/health")
