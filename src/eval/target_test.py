@@ -1,43 +1,37 @@
 """Tests for the eval target function."""
 
-from unittest.mock import AsyncMock, patch
+from collections.abc import AsyncGenerator
+from typing import Union
+from unittest.mock import patch
 
 import pytest
-from langchain_core.documents import Document
 
 from src.eval.target import target
-from src.schemas.chat import Citation, CitationsEvent, TokenEvent
+from src.schemas.chat import ChunksEvent, Citation, CitationsEvent, TokenEvent
+
+StreamEvent = Union[ChunksEvent, TokenEvent, CitationsEvent]
 
 
 @pytest.mark.asyncio
 async def test_target_returns_expected_shape() -> None:
-    """Target function returns dict with answer, documents, and citations keys."""
-    mock_chunks = [
-        Document(page_content="chunk one", metadata={"page": 1}),
-        Document(page_content="chunk two", metadata={"page": 3}),
-    ]
+    """Target function returns dict with answer, documents, and citations."""
 
-    fake_events = [
-        TokenEvent(token="The answer is "),
-        TokenEvent(token="42 [p. 1]."),
-        CitationsEvent(citations=[Citation(page=1)]),
-    ]
+    async def fake_pipeline(
+        query: str, document_id: str, user_id: str, k: int = 5, *, client=None
+    ) -> AsyncGenerator[StreamEvent, None]:
+        yield ChunksEvent(
+            chunks=[
+                {"page_content": "chunk one", "page": 1},
+                {"page_content": "chunk two", "page": 3},
+            ]
+        )
+        yield TokenEvent(token="The answer is ")
+        yield TokenEvent(token="42 [p. 1].")
+        yield CitationsEvent(citations=[Citation(page=1)])
 
-    async def fake_stream(query: str, chunks: list[Document]):
-        for event in fake_events:
-            yield event
-
-    with (
-        patch(
-            "src.eval.target.retrieve_chunks",
-            new_callable=AsyncMock,
-            return_value=mock_chunks,
-        ) as mock_retrieve,
-        patch(
-            "src.eval.target.stream_answer_with_citations",
-            side_effect=fake_stream,
-        ),
-    ):
+    with patch(
+        "src.eval.target.stream_rag_pipeline", side_effect=fake_pipeline
+    ) as mock_pipeline:
         result = await target(
             {
                 "question": "What is the answer?",
@@ -46,25 +40,15 @@ async def test_target_returns_expected_shape() -> None:
             }
         )
 
-    # Verify output shape
     assert isinstance(result, dict)
-    assert "answer" in result
-    assert "documents" in result
-    assert "citations" in result
-
-    # Verify answer is assembled from token events
     assert result["answer"] == "The answer is 42 [p. 1]."
-
-    # Verify documents are serialised correctly
-    assert len(result["documents"]) == 2
-    assert result["documents"][0] == {"page_content": "chunk one", "page": 1}
-    assert result["documents"][1] == {"page_content": "chunk two", "page": 3}
-
-    # Verify citations are serialised correctly
+    assert result["documents"] == [
+        {"page_content": "chunk one", "page": 1},
+        {"page_content": "chunk two", "page": 3},
+    ]
     assert result["citations"] == [{"page": 1}]
 
-    # Verify retrieve_chunks was called with correct args and no auth client
-    mock_retrieve.assert_called_once_with(
+    mock_pipeline.assert_called_once_with(
         query="What is the answer?",
         document_id="doc-123",
         user_id="user-456",
@@ -76,26 +60,14 @@ async def test_target_with_no_chunks_returns_fallback() -> None:
     """Target returns fallback answer when no chunks are retrieved."""
     fallback_text = "I don't have enough information to answer that question."
 
-    fake_events = [
-        TokenEvent(token=fallback_text),
-        CitationsEvent(citations=[]),
-    ]
+    async def fake_pipeline(
+        query: str, document_id: str, user_id: str, k: int = 5, *, client=None
+    ) -> AsyncGenerator[StreamEvent, None]:
+        yield ChunksEvent(chunks=[])
+        yield TokenEvent(token=fallback_text)
+        yield CitationsEvent(citations=[])
 
-    async def fake_stream(query: str, chunks: list[Document]):
-        for event in fake_events:
-            yield event
-
-    with (
-        patch(
-            "src.eval.target.retrieve_chunks",
-            new_callable=AsyncMock,
-            return_value=[],
-        ),
-        patch(
-            "src.eval.target.stream_answer_with_citations",
-            side_effect=fake_stream,
-        ),
-    ):
+    with patch("src.eval.target.stream_rag_pipeline", side_effect=fake_pipeline):
         result = await target(
             {
                 "question": "unknown",

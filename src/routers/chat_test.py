@@ -10,7 +10,7 @@ from httpx import ASGITransport, AsyncClient
 
 from src.app import app
 from src.auth import get_authenticated_user
-from src.schemas.chat import Citation, CitationsEvent, TokenEvent
+from src.schemas.chat import ChunksEvent, Citation, CitationsEvent, TokenEvent
 
 USER_ID = "f9937aab-6c97-4c3e-a6f8-38f4a1676200"
 
@@ -51,9 +51,10 @@ async def test_chat_stream_emits_token_citations_done() -> None:
     """Test SSE stream emits token events, then citations, then done."""
     document_id = "test-doc-123"
 
-    async def fake_stream(
-        query: str, chunks: int
-    ) -> AsyncGenerator[Union[TokenEvent, CitationsEvent], None]:
+    async def fake_pipeline(
+        query: str, document_id: str, user_id: str, k: int = 5, *, client=None
+    ) -> AsyncGenerator[Union[ChunksEvent, TokenEvent, CitationsEvent], None]:
+        yield ChunksEvent(chunks=[])
         yield TokenEvent(token="The author ")
         yield TokenEvent(token="argues that [p. 12].")
         yield CitationsEvent(citations=[Citation(page=12)])
@@ -65,16 +66,9 @@ async def test_chat_stream_emits_token_citations_done() -> None:
     app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
     try:
-        with (
-            patch(
-                "src.routers.chat.retrieve_chunks",
-                new_callable=AsyncMock,
-                return_value=[],
-            ) as mock_retrieve,
-            patch(
-                "src.routers.chat.stream_answer_with_citations", side_effect=fake_stream
-            ),
-        ):
+        with patch(
+            "src.routers.chat.stream_rag_pipeline", side_effect=fake_pipeline
+        ) as mock_pipeline:
             transport = ASGITransport(app=app)
             async with AsyncClient(
                 transport=transport, base_url="http://test"
@@ -100,7 +94,7 @@ async def test_chat_stream_emits_token_citations_done() -> None:
             ("done", {}),
         ]
         assert event_sequence == expected_sequence
-        mock_retrieve.assert_called_once_with(
+        mock_pipeline.assert_called_once_with(
             query="What is the main argument?",
             document_id=document_id,
             user_id=USER_ID,
@@ -116,9 +110,10 @@ async def test_chat_stream_with_no_results() -> None:
     """Test SSE stream when no relevant chunks found."""
     document_id = "test-doc-456"
 
-    async def fake_stream(
-        query: str, chunks: int
-    ) -> AsyncGenerator[Union[TokenEvent, CitationsEvent], None]:
+    async def fake_pipeline(
+        query: str, document_id: str, user_id: str, k: int = 5, *, client=None
+    ) -> AsyncGenerator[Union[ChunksEvent, TokenEvent, CitationsEvent], None]:
+        yield ChunksEvent(chunks=[])
         yield TokenEvent(token="I don't have enough information.")
         yield CitationsEvent(citations=[])
 
@@ -129,16 +124,9 @@ async def test_chat_stream_with_no_results() -> None:
     app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
     try:
-        with (
-            patch(
-                "src.routers.chat.retrieve_chunks",
-                new_callable=AsyncMock,
-                return_value=[],
-            ) as mock_retrieve,
-            patch(
-                "src.routers.chat.stream_answer_with_citations", side_effect=fake_stream
-            ),
-        ):
+        with patch(
+            "src.routers.chat.stream_rag_pipeline", side_effect=fake_pipeline
+        ) as mock_pipeline:
             transport = ASGITransport(app=app)
             async with AsyncClient(
                 transport=transport, base_url="http://test"
@@ -162,7 +150,7 @@ async def test_chat_stream_with_no_results() -> None:
             ("done", {}),
         ]
         assert event_sequence == expected_sequence
-        mock_retrieve.assert_called_once_with(
+        mock_pipeline.assert_called_once_with(
             query="Unknown topic",
             document_id=document_id,
             user_id=USER_ID,
@@ -175,8 +163,15 @@ async def test_chat_stream_with_no_results() -> None:
 
 @pytest.mark.asyncio
 async def test_chat_stream_error_handling() -> None:
-    """Test SSE endpoint error handling."""
+    """Test SSE endpoint emits error event when pipeline fails during streaming."""
     document_id = "test-doc-789"
+
+    async def failing_pipeline(
+        query: str, document_id: str, user_id: str, k: int = 5, *, client=None
+    ) -> AsyncGenerator[TokenEvent, None]:
+        raise Exception("Database error")
+        yield TokenEvent(token="")
+
     mock_auth_user = MagicMock()
     mock_auth_user.id = USER_ID
     mock_auth_user.client = AsyncMock()
@@ -184,24 +179,31 @@ async def test_chat_stream_error_handling() -> None:
     app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
     try:
-        with (
-            patch(
-                "src.routers.chat.retrieve_chunks",
-                new_callable=AsyncMock,
-                side_effect=Exception("Database error"),
-            ),
+        with patch(
+            "src.routers.chat.stream_rag_pipeline", side_effect=failing_pipeline
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(
                 transport=transport, base_url="http://test"
             ) as client:
-                response = await client.post(
+                lines: list[str] = []
+                async with client.stream(
+                    "POST",
                     f"/chat/{document_id}",
                     json={"message": "Test question"},
                     headers={"Authorization": "Bearer fake-token"},
-                )
+                ) as response:
+                    assert response.status_code == 200
+                    async for line in response.aiter_lines():
+                        lines.append(line)
 
-            assert response.status_code == 500
+        events = parse_sse_events(lines)
+        event_sequence = [(e["event"], json.loads(e["data"])) for e in events]
+        expected_sequence = [
+            ("error", {"detail": "An error occurred while generating the answer."}),
+            ("done", {}),
+        ]
+        assert event_sequence == expected_sequence
     finally:
         app.dependency_overrides.clear()
 
@@ -211,8 +213,8 @@ async def test_chat_stream_error_during_streaming() -> None:
     """Test SSE endpoint emits error event when streaming fails mid-stream."""
     document_id = "test-doc-stream-err"
 
-    async def failing_stream(
-        query: str, chunks: int
+    async def failing_pipeline(
+        query: str, document_id: str, user_id: str, k: int = 5, *, client=None
     ) -> AsyncGenerator[TokenEvent, None]:
         yield TokenEvent(token="partial token")
         raise RuntimeError("LLM connection lost")
@@ -224,16 +226,8 @@ async def test_chat_stream_error_during_streaming() -> None:
     app.dependency_overrides[get_authenticated_user] = lambda: mock_auth_user
 
     try:
-        with (
-            patch(
-                "src.routers.chat.retrieve_chunks",
-                new_callable=AsyncMock,
-                return_value=[],
-            ) as mock_retrieve,
-            patch(
-                "src.routers.chat.stream_answer_with_citations",
-                side_effect=failing_stream,
-            ),
+        with patch(
+            "src.routers.chat.stream_rag_pipeline", side_effect=failing_pipeline
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(
@@ -258,13 +252,6 @@ async def test_chat_stream_error_during_streaming() -> None:
             ("done", {}),
         ]
         assert event_sequence == expected_sequence
-        mock_retrieve.assert_called_once_with(
-            query="Test question",
-            document_id=document_id,
-            user_id=USER_ID,
-            k=5,
-            client=mock_auth_user.client,
-        )
     finally:
         app.dependency_overrides.clear()
 
