@@ -71,6 +71,15 @@ def _get_grader() -> Runnable:
     return GRADING_PROMPT | llm.with_structured_output(CorrectnessGrade)
 
 
+def _get_outputs(obj, attr: str) -> dict:
+    """Safely extract a dict attribute from either a RunTree or a plain dict."""
+    return (
+        (getattr(obj, attr, None) or {})
+        if hasattr(obj, attr)
+        else (obj.get(attr) or {})
+    )
+
+
 async def correctness(run: Run, example: Example | None) -> EvaluationResult:
     """LLM-as-judge evaluator that checks answer correctness.
 
@@ -88,26 +97,25 @@ async def correctness(run: Run, example: Example | None) -> EvaluationResult:
         An ``EvaluationResult`` with ``key`` set to ``correctness``, ``score``
         of 1 or 0, and a ``comment`` containing the grader's explanation.
     """
-    if not run.outputs or not example or not example.outputs or not example.inputs:
+
+    run_outputs = _get_outputs(run, "outputs")
+    example_inputs = _get_outputs(example, "inputs")
+    example_outputs = _get_outputs(example, "outputs")
+
+    missing = []
+    if "question" not in example_inputs:
+        missing.append("question (example.inputs)")
+    if "answer" not in example_outputs:
+        missing.append("answer (example.outputs)")
+    if "answer" not in run_outputs:
+        missing.append("answer (run.outputs)")
+
+    if missing:
         return EvaluationResult(
             key="correctness",
             score=0,
-            comment="No outputs found",
+            comment=f"Missing required keys: {', '.join(missing)}",
         )
-
-    run_outputs = (
-        run.outputs if hasattr(run, "outputs") else run.get("outputs", {}) or {}
-    )
-    example_inputs = (
-        example.inputs
-        if hasattr(example, "inputs")
-        else example.get("inputs", {}) or {}
-    )
-    example_outputs = (
-        example.outputs
-        if hasattr(example, "outputs")
-        else example.get("outputs", {}) or {}
-    )
 
     grader = _get_grader()
 
