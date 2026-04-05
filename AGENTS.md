@@ -92,9 +92,9 @@ uv add --dev <package>
 
 ---
 
-## Linting & Formatting
+## Linting & Formatting & Type Checking
 
-Ruff is the single tool for both linting and formatting.
+Ruff is the single tool for both linting and formatting. Type checking is done with ty
 
 ---
 

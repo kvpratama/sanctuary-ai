@@ -4,6 +4,9 @@ Contains placeholder examples that must be replaced with real values
 before running end-to-end evaluation.
 """
 
+import hashlib
+import json
+
 from langsmith import Client
 
 DATASET_NAME = "sanctuary"
@@ -17,11 +20,14 @@ examples: list[dict] = [
             "user_id": "f9937aab-6c97-4c3e-a6f8-38f4a1676200",
         },
         "outputs": {
-            "answer": """**Detecting drift** is your first priority. In a live environment, the statistical properties of your incoming data will inevitably diverge from what your model was trained on — this is called distribution shift or concept drift. You catch it by continuously monitoring key signals: use statistical tests like the KS test or Population Stability Index (PSI) on your input features, watch your model's prediction confidence distribution, and track output label proportions over time. Tools like Evidently AI, Alibi Detect, or WhyLogs make this operationally manageable. The critical insight here is to monitor inputs and outputs *before* accuracy degrades — by the time your metrics drop visibly, you've already been serving bad predictions for days.
+            "answer": """In a live environment, the first step is **detecting shifts** by monitoring artifacts like **model predictions and input features**, as ground truth labels are often delayed or unavailable. Because predictions are generally low-dimensional, they serve as an effective proxy for input shifts; a significant change in the prediction distribution usually indicates that the underlying data distribution has diverged from the training set. It is crucial to **rule out internal human errors** first, such as bugs in the data pipeline, missing values, or mismatched schemas, which frequently mimic distribution shifts on monitoring dashboards. **Observability** further aids this diagnosis by allowing teams to slice metrics along different dimensions to identify exactly which subgroups of users or types of inputs are driving the performance degradation.
 
-**Once drift is detected, your remediation strategy depends on what shifted.** If only the input distribution changed (covariate shift), importance weighting lets you retrain on your existing labeled data while correcting for the mismatch. If the underlying relationship between features and labels changed (concept drift), you need fresh labeled data and a retrained model. The most common pattern is sliding-window retraining — continuously retraining on a recent time window of data, optionally weighting newer samples more heavily. For high-frequency data streams where batch retraining is too slow, online learning frameworks like River let the model update incrementally with each new sample.
+Once a shift is confirmed, the primary remediation is **retraining the model** using labeled data from the new target distribution. This can be achieved through **stateless retraining**, where the model is rebuilt from scratch using both old and new data, or **stateful training (fine-tuning)**, which continues training the existing model on fresh data to converge faster and save compute resources. Beyond reactive retraining, systems can be **proactively designed for robustness** by choosing stable features, such as bucketing rapidly changing raw rankings into broader categories. Additionally, maintaining **separate models for different data slices** (e.g., different geographic regions) allows for localized adaptation, ensuring that a fast-changing market segment can be updated frequently without affecting more stable segments.
 
-**Architecturally, build drift handling in from the start.** Log every prediction alongside its input features and timestamp so you can do retrospective analysis. Store ground truth labels as they arrive and join them back to predictions. Use shadow/challenger models running in parallel so a freshly retrained model can be validated on live traffic before promotion. Implement canary deployments to safely roll out updated models to a traffic slice first. Finally, version your datasets alongside your models — knowing exactly which data produced which model behavior is essential for debugging when things go wrong in production.""",
+For sustainable management, organizations should move toward **continual learning infrastructure** to automate model updates triggered by time, performance drops, or detected drifts. Before finalizing an update schedule, it is vital to **quantify the value of data freshness** through experiments that measure exactly how much model performance improves when using more recent data. Finally, any updated "challenger" model must be **tested in production** safely before a full rollout using techniques like **shadow deployment**, where predictions are logged but not served to users, or **A/B testing and canary releases** to evaluate the new model's performance against the current "champion" model in a live setting.""",
+        },
+        "metadata": {
+            "external_id": "id_1",
         },
     },
     {
@@ -31,11 +37,14 @@ examples: list[dict] = [
             "user_id": "f9937aab-6c97-4c3e-a6f8-38f4a1676200",
         },
         "outputs": {
-            "answer": """The gap between training performance and production performance almost always comes down to **data leakage, distribution mismatch, or evaluation methodology errors** made before deployment. The fix starts at the very beginning of your pipeline, not at deployment time. First, ensure your validation strategy honestly reflects production conditions: use time-based splits instead of random splits if your data is temporal, hold out data from entirely unseen user segments or geographies, and never let any future information leak into your training features. A model that scores 95% AUC in a leaky offline evaluation might drop to 70% in production, and the gap will be invisible until it's too late. Invest heavily in building a validation set that is a faithful replica of what the model will actually see.
+            "answer": """To ensure your model performs as well in production as it did during training, you must first address **train-serving skew**, a common failure mode where a model generalizes poorly because the underlying distribution of real-world data diverges from your finite training data. **Offline evaluation** should go beyond aggregate accuracy metrics to include **perturbation tests**, which simulate noisy production inputs, and **invariance tests** to ensure that changes to sensitive information do not lead to incorrect outputs. It is also essential to evaluate your model against various **baselines**, such as human experts or simple heuristics, to justify the complexity of the ML solution.
 
-**Closing the training-serving skew** is the second major lever. This happens when the features your model sees during training are computed differently than the features served at inference time — a surprisingly common and painful problem. The solution is to use a shared feature store so that the exact same transformation code runs in both training and serving pipelines. Shadow your production environment during training: replicate the same data types, null rates, encoding schemes, and preprocessing steps. Log a sample of live inference requests regularly and compare their feature distributions against your training data using PSI or KS tests. Any divergence between the two is silent model degradation waiting to happen.
+Methodologically, you must prevent **data leakage** by splitting time-correlated data by time rather than randomly and ensuring that **feature scaling** statistics are derived solely from the training split. Maintaining **feature consistency** is another critical factor, as having separate data pipelines for training and inference is a frequent source of production bugs. Implementing a **feature store** can mitigate this risk by unifying the logic for both batch and streaming features, ensuring that the model receives the same inputs during inference as it did during development.
 
-**Finally, treat production as a continuous experiment, not a finish line.** Implement structured A/B testing and canary deployments so every model update is validated on real traffic before full rollout. Collect ground truth labels from production as fast as your business allows — user clicks, conversions, outcomes — and feed them back into your evaluation loop. Set up automated retraining triggers when drift is detected rather than retraining on a fixed calendar schedule. Monitor not just accuracy but business metrics, since a model can look statistically healthy while quietly optimizing the wrong objective. The models that hold up in production are the ones backed by a monitoring and feedback infrastructure that treats deployment as the beginning of the model's lifecycle, not the end.""",
+Once the model is ready for deployment, use **shadow deployment** to route live traffic to the new model without serving its predictions to users, allowing you to safely analyze its performance against the existing "champion" model. Techniques such as **A/B testing and canary releases** further enable you to validate the model's effectiveness with live data before a full rollout. Finally, establishing **robust monitoring and observability** is required to detect "silent failures," where the system remains operational but prediction quality degrades due to constantly shifting data distributions.""",
+        },
+        "metadata": {
+            "external_id": "id_2",
         },
     },
     {
@@ -45,21 +54,42 @@ examples: list[dict] = [
             "user_id": "f9937aab-6c97-4c3e-a6f8-38f4a1676200",
         },
         "outputs": {
-            "answer": """**Silent failures are dangerous precisely because no alarm goes off** — the model continues serving predictions confidently while its quality degrades invisibly. They typically stem from three root causes: upstream data pipeline changes that alter feature distributions without breaking schemas, concept drift where the real-world relationship between inputs and outputs has shifted, or a business metric decoupling where the model's statistical performance looks fine but it's quietly optimizing the wrong thing. The first line of defense is monitoring inputs, not just outputs. Log every inference request with its full feature vector and timestamp, then run continuous statistical checks — PSI on numeric features, chi-squared on categoricals — comparing live distributions against your training baseline. If a feature that was never null during training suddenly shows 30% nulls in production, your model is operating in territory it was never designed for, and accuracy metrics alone will never surface that.
+            "answer": """**Silent failures** are uniquely challenging because the system continues to run without throwing operational errors (like 404s or crashes), producing incorrect predictions that users may trust blindly. To detect these, you should primarily **monitor model predictions**; because they are low-dimensional, sudden changes in their distribution often serve as an effective proxy for shifts in the underlying input data. Additionally, implementing **feature validation** to ensure inputs follow expected schemas and tracking **user feedback**—such as click-through or completion rates—can reveal performance drops that aggregate metrics might hide. **Observability** is crucial here, as it allows you to "slice and dice" metrics by user subgroups or time windows to identify if a failure is global or isolated to specific inputs.
 
-**Once you suspect a silent failure, your debugging workflow should be systematic.** Start by slicing your prediction logs by time, user segment, geography, or any other dimension you can think of — aggregate metrics often mask severe degradation in subgroups. Compare your live prediction confidence distribution against what it looked like at deployment; a model that was previously sharp but is now producing flat, uncertain probability distributions has lost its signal. Next, join your predictions back to any available ground truth labels, even partial or delayed ones, and compute metrics on that joined subset. If you can't get labels quickly, use proxy signals — engagement, downstream conversions, complaint rates — as early warning indicators. Build a confusion matrix over time and look for asymmetric degradation, where one class is being systematically misclassified while overall accuracy stays artificially inflated by class imbalance.
+Once a failure is detected, you must first **diagnose the root cause**, as a large percentage of perceived data shifts are actually **internal human errors** like pipeline bugs, missing values, or inconsistent feature extraction between training and inference. It is vital to rule out these operational issues before assuming a fundamental change in the environment has occurred. If the failure is indeed caused by a **data distribution shift**, such as covariate shift or concept drift, you must adapt the model to the new target distribution. **Statistical methods**, including two-sample hypothesis tests like the Kolmogorov–Smirnov test, can help confirm if the difference between production data and training data is statistically significant enough to merit intervention.
 
-**Fixing a silent failure requires both an immediate response and a structural one.** In the short term, roll back to the last known good model version using your canary or blue-green deployment infrastructure, buying yourself time to investigate without continued damage. Then trace the failure back through your pipeline: check whether any upstream data source changed its schema, encoding, or null behavior around the time degradation began. Re-examine your feature engineering code for any step that behaves differently at scale or under production data conditions versus your training environment. For the structural fix, retrain on recent data that reflects the current distribution, validate it against a holdout set drawn from the same recent window, and deploy it through a shadow-mode comparison against the incumbent before promotion. Long term, the real fix is building the observability infrastructure that catches the next silent failure before it becomes a crisis — automated drift alerts, prediction distribution monitoring, and a fast ground truth feedback loop are not optional luxuries, they are the foundation of a trustworthy production ML system."""
+To fix these failures and increase future reliability, the most common industry approach is **retraining the model** with fresh labeled data from the target distribution, utilizing either **stateless retraining** (from scratch) or **stateful training (fine-tuning)** to save compute resources. Beyond reactive retraining, you can **design for robustness** by choosing stable features—for instance, bucketing rapidly changing raw rankings into broader categories. Implementing **smooth failing** with a backup system, such as a simple heuristic or a set of precomputed predictions, ensures the system remains useful if the main model produces suspicious outputs. Finally, to correct **degenerate feedback loops** that bias future training data, you can introduce **randomization** to explore new items or use positional features to decouple a model's prediction from its rank on a screen."""
+        },
+        "metadata": {
+            "external_id": "id_3",
         },
     },
 ]
 
 
-def ensure_dataset(client: Client | None = None) -> str:
-    """Create the evaluation dataset in LangSmith if it does not already exist.
+def get_content_hash(inputs: dict, outputs: dict) -> str:
+    """Generate a unique SHA-256 hash from combined inputs and outputs.
 
-    Uploads hardcoded examples idempotently — skips creation when a dataset
-    with the same name is already present.
+    Args:
+        inputs: Dictionary of input values to include in the hash.
+        outputs: Dictionary of output values to include in the hash.
+
+    Returns:
+        A hex-encoded SHA-256 hash string unique to the combined content.
+    """
+    # 1. Combine inputs and outputs into a predictable string
+    combined = json.dumps({"i": inputs, "o": outputs}, sort_keys=True)
+    # 2. Create a SHA-256 hash (or MD5 for slightly faster, less strict usage)
+    return hashlib.sha256(combined.encode()).hexdigest()
+
+
+def ensure_dataset(client: Client | None = None) -> str:
+    """Create or sync the evaluation dataset in LangSmith.
+
+    Creates the dataset with all hardcoded examples if it does not exist.
+    If it already exists, performs a diff-based sync so that any changes
+    to the ``examples`` list (additions, deletions, modifications) are
+    reflected in LangSmith.
 
     Args:
         client: Optional LangSmith client. Created automatically if not provided.
@@ -70,12 +100,61 @@ def ensure_dataset(client: Client | None = None) -> str:
     if client is None:
         client = Client()
 
-    if not client.has_dataset(dataset_name=DATASET_NAME):
+    # 1. Ensure dataset exists
+    try:
+        dataset = client.read_dataset(dataset_name=DATASET_NAME)
+    except Exception:
         dataset = client.create_dataset(dataset_name=DATASET_NAME)
-        client.create_examples(
-            inputs=[ex["inputs"] for ex in examples],
-            outputs=[ex["outputs"] for ex in examples],
-            dataset_id=dataset.id,
-        )
+
+    # 2. Get existing examples to compare
+    # Note: If your dataset is huge, you may need to paginate or filter
+    existing_examples = list(client.list_examples(dataset_id=dataset.id))
+    existing_map = {
+        ex.metadata.get("external_id"): ex for ex in existing_examples if ex.metadata
+    }
+
+    existed, updated, new_examples = [], [], []
+
+    # 3. Iterate through your local examples to create/update
+    for ex in examples:
+        external_id = ex["metadata"]["external_id"]
+        current_hash = get_content_hash(ex["inputs"], ex["outputs"])
+
+        # Merge your external ID with the hash for tracking
+        metadata = ex.get("metadata", {}).copy()
+        metadata["content_hash"] = current_hash
+
+        if external_id in existing_map:
+            # Check if existing content matches current hash
+
+            existing_ex = existing_map[external_id]
+            if (
+                existing_ex.metadata
+                and existing_ex.metadata.get("content_hash") != current_hash
+            ):
+                client.update_example(
+                    example_id=existing_ex.id,
+                    inputs=ex["inputs"],
+                    outputs=ex["outputs"],
+                    metadata=metadata,
+                )
+                updated.append(ex)
+            else:
+                existed.append(ex)
+        else:
+            # New example - upload it
+            client.create_example(
+                dataset_id=dataset.id,
+                inputs=ex["inputs"],
+                outputs=ex["outputs"],
+                metadata=metadata,
+            )
+            new_examples.append(ex)
+
+    print(
+        f"Updated {len(updated)} examples, \n"
+        f"created {len(new_examples)} new examples, and \n"
+        f"found {len(existed)} existing examples.\n"
+    )
 
     return DATASET_NAME

@@ -32,8 +32,8 @@ GRADING_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             "You are a grading assistant. Grade whether the ACTUAL answer "
-            "is correct given the EXPECTED answer. Respond with a brief "
-            "explanation and whether the answer is correct.",
+            "is correct given the EXPECTED answer. You must first respond with a brief "
+            "explanation of your reasoning, and then finally output whether the answer is correct.",
         ),
         (
             "human",
@@ -78,12 +78,15 @@ async def correctness(run: Run, example: Example | None) -> EvaluationResult:
     from the dataset using an LLM grader with structured output.
 
     Args:
-        inputs: The dataset example inputs (contains ``question``).
-        outputs: The target function's output (contains ``answer``).
-        reference_outputs: The expected output (contains ``answer``).
+        run: The LangSmith run object containing the target function's outputs
+            (must include an ``answer`` key).
+        example: The LangSmith dataset example containing inputs and expected
+            outputs (inputs must include ``question``, outputs must include
+            ``answer``).
 
     Returns:
-        A dict with ``score`` (1 or 0) and ``comment`` (explanation).
+        An ``EvaluationResult`` with ``key`` set to ``correctness``, ``score``
+        of 1 or 0, and a ``comment`` containing the grader's explanation.
     """
     if not run.outputs or not example or not example.outputs or not example.inputs:
         return EvaluationResult(
