@@ -75,13 +75,18 @@ def test_ensure_dataset_updates_changed_examples() -> None:
     existing = _make_example_object("id_1", stale_hash)
     mock_client.list_examples.return_value = [existing]
 
+    # Derive expected IDs/counts from the fixture data
+    local_ids = {ex["metadata"]["external_id"] for ex in examples}
+    existing_ids = {e.metadata["external_id"] for e in [existing] if e.metadata}
+    expected_creates = local_ids - existing_ids
+    expected_deletes = existing_ids - local_ids
+    expected_updates = existing_ids & local_ids  # hash differs (stale vs current)
+
     ensure_dataset(client=mock_client)
 
-    # id_1 should be updated (hash differs)
-    mock_client.update_example.assert_called_once()
-    # id_2 and id_3 should be created
-    assert mock_client.create_example.call_count == 2
-    mock_client.delete_example.assert_not_called()
+    assert mock_client.update_example.call_count == len(expected_updates)
+    assert mock_client.create_example.call_count == len(expected_creates)
+    assert mock_client.delete_example.call_count == len(expected_deletes)
 
 
 def test_ensure_dataset_leaves_unchanged_examples_alone() -> None:
@@ -158,19 +163,40 @@ def test_ensure_dataset_creates_and_updates_and_deletes_together() -> None:
     mock_client = MagicMock()
     mock_client.read_dataset.return_value = _make_dataset()
 
-    # id_1 exists with stale hash (should update)
-    # id_2 exists with correct hash (should be unchanged)
-    # id_3 is missing remotely (should create)
-    # remote_extra is an orphaned remote example (should delete)
-    id_1_hash = "wrong-hash"
-    id_2_hash = get_content_hash(examples[1]["inputs"], examples[1]["outputs"])
-    id_1 = _make_example_object("id_1", id_1_hash)
-    id_2 = _make_example_object("id_2", id_2_hash)
+    # Pick one local example to exist with a stale hash (should update)
+    stale_external_id = examples[0]["metadata"]["external_id"]
+    stale_hash = "wrong-hash"
+    stale_example = _make_example_object(stale_external_id, stale_hash)
+
+    # Pick another local example to exist with the correct hash (unchanged)
+    unchanged_idx = 1
+    unchanged_external_id = examples[unchanged_idx]["metadata"]["external_id"]
+    unchanged_hash = get_content_hash(
+        examples[unchanged_idx]["inputs"], examples[unchanged_idx]["outputs"]
+    )
+    unchanged_example = _make_example_object(unchanged_external_id, unchanged_hash)
+
+    # Add an orphaned remote example (should delete)
     orphaned = _make_example_object("remote_extra", "some-hash")
-    mock_client.list_examples.return_value = [id_1, id_2, orphaned]
+    mock_client.list_examples.return_value = [
+        stale_example,
+        unchanged_example,
+        orphaned,
+    ]
+
+    # Derive expected sets from fixture data
+    local_ids = {ex["metadata"]["external_id"] for ex in examples}
+    existing_ids_from_mock = {
+        e.metadata["external_id"]
+        for e in mock_client.list_examples.return_value
+        if e.metadata
+    }
+    expected_creates = local_ids - existing_ids_from_mock
+    # Only stale_example should update (it's in both sets and has a different hash)
+    expected_updates = {stale_external_id}
 
     ensure_dataset(client=mock_client)
 
-    assert mock_client.update_example.call_count == 1
-    assert mock_client.create_example.call_count == 1
+    assert mock_client.update_example.call_count == len(expected_updates)
+    assert mock_client.create_example.call_count == len(expected_creates)
     mock_client.delete_example.assert_called_once_with(example_id=orphaned.id)

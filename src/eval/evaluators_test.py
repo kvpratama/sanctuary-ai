@@ -1,6 +1,6 @@
 """Tests for the eval correctness evaluator."""
 
-from typing import Any
+from typing import Mapping
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,14 +9,16 @@ from langsmith.schemas import Example, Run
 from src.eval.evaluators import correctness
 
 
-def _make_run(outputs: dict[str, Any]) -> Run:
+def _make_run(outputs: Mapping[str, object]) -> Run:
     """Create a minimal mock Run with the given outputs."""
     run = MagicMock(spec=Run)
     run.outputs = outputs
     return run
 
 
-def _make_example(inputs: dict[str, Any], outputs: dict[str, Any]) -> Example:
+def _make_example(
+    inputs: Mapping[str, object], outputs: Mapping[str, object]
+) -> Example:
     """Create a minimal mock Example with the given inputs/outputs."""
     example = MagicMock(spec=Example)
     example.inputs = inputs
