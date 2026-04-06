@@ -53,10 +53,10 @@ async def test_retrieve_chunks_calls_rpc_with_filter():
         mock_client.rpc = MagicMock(return_value=mock_rpc_builder)
 
         result = await retrieve_chunks(
-            query="test question",
-            document_id="doc-123",
-            user_id="user-456",
-            k=3,
+            query="test question",  # ty: ignore[invalid-argument-type]
+            document_id="doc-123",  # ty: ignore[invalid-argument-type]
+            user_id="user-456",  # ty: ignore[invalid-argument-type]
+            k=3,  # ty: ignore[invalid-argument-type]
         )
 
         # Verify RPC was called with correct parameters
@@ -102,9 +102,9 @@ async def test_retrieve_chunks_uses_provided_client():
         mock_embed_cls.return_value = mock_embed_instance
 
         result = await retrieve_chunks(
-            query="test",
-            document_id="doc-123",
-            user_id="user-456",
+            query="test",  # ty: ignore[invalid-argument-type]
+            document_id="doc-123",  # ty: ignore[invalid-argument-type]
+            user_id="user-456",  # ty: ignore[invalid-argument-type]
             client=mock_client,
         )
 
@@ -201,8 +201,8 @@ async def test_stream_answer_with_citations_yields_tokens_then_citations():
 
         results = []
         async for item in stream_answer_with_citations(
-            query="What is the main argument?",
-            chunks=chunks_input,
+            query="What is the main argument?",  # ty: ignore[invalid-argument-type]
+            chunks=chunks_input,  # ty: ignore[invalid-argument-type]
         ):
             results.append(item)
 
@@ -257,8 +257,8 @@ async def test_stream_answer_empty_llm_response_yields_fallback_token():
 
         results = []
         async for item in stream_answer_with_citations(
-            query="anything",
-            chunks=chunks_input,
+            query="anything",  # ty: ignore[invalid-argument-type]
+            chunks=chunks_input,  # ty: ignore[invalid-argument-type]
         ):
             results.append(item)
 
@@ -278,8 +278,8 @@ async def test_stream_answer_with_citations_no_chunks():
 
     results = []
     async for item in stream_answer_with_citations(
-        query="test question",
-        chunks=[],
+        query="test question",  # ty: ignore[invalid-argument-type]
+        chunks=[],  # ty: ignore[invalid-argument-type]
     ):
         results.append(item)
 
@@ -323,10 +323,10 @@ async def test_stream_rag_pipeline_yields_events():
         results = [
             event
             async for event in stream_rag_pipeline(
-                query="Hi",
-                document_id="doc-1",
-                user_id="user-1",
-                k=3,
+                query="Hi",  # ty: ignore[invalid-argument-type]
+                document_id="doc-1",  # ty: ignore[invalid-argument-type]
+                user_id="user-1",  # ty: ignore[invalid-argument-type]
+                k=3,  # ty: ignore[invalid-argument-type]
                 client=mock_client,
             )
         ]

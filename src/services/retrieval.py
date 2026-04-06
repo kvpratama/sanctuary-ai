@@ -6,6 +6,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langsmith import traceable
 
 from src.config import EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
@@ -22,6 +23,7 @@ from supabase import AsyncClient
 logger = logging.getLogger(__name__)
 
 
+@traceable
 async def retrieve_chunks(
     query: str,
     document_id: str,
@@ -111,6 +113,7 @@ def extract_citations(answer: str, chunks: list[Document]) -> list[Citation]:
     return [Citation(page=page) for page in valid_pages]
 
 
+@traceable
 async def stream_answer_with_citations(
     query: str,
     chunks: list[Document],
@@ -128,7 +131,7 @@ async def stream_answer_with_citations(
         yield CitationsEvent(citations=[])
         return
 
-    # Build context (same logic as generate_answer_with_citations)
+    # Build context
     context_parts = []
     for chunk in chunks:
         page = chunk.metadata.get("page", "unknown")
@@ -188,6 +191,7 @@ async def stream_answer_with_citations(
     yield CitationsEvent(citations=citations)
 
 
+@traceable
 async def stream_rag_pipeline(
     query: str,
     document_id: str,
@@ -214,11 +218,11 @@ async def stream_rag_pipeline(
         ChunksEvent with retrieved documents, then TokenEvent and CitationsEvent.
     """
     chunks = await retrieve_chunks(
-        query=query,
-        document_id=document_id,
-        user_id=user_id,
-        k=k,
-        client=client,
+        query=query,  # ty: ignore[invalid-argument-type]
+        document_id=document_id,  # ty: ignore[invalid-argument-type]
+        user_id=user_id,  # ty: ignore[invalid-argument-type]
+        k=k,  # ty: ignore[invalid-argument-type]
+        client=client,  # ty: ignore[invalid-argument-type]
     )
 
     yield ChunksEvent(
@@ -228,5 +232,5 @@ async def stream_rag_pipeline(
         ]
     )
 
-    async for event in stream_answer_with_citations(query=query, chunks=chunks):
+    async for event in stream_answer_with_citations(query=query, chunks=chunks):  # ty: ignore
         yield event
