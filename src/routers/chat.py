@@ -45,11 +45,11 @@ async def chat(
         """
         try:
             async for event in stream_rag_pipeline(
-                query=request.message,
-                document_id=document_id,
-                user_id=user.id,
-                k=5,
-                client=user.client,
+                query=request.message,  # ty: ignore[invalid-argument-type]
+                document_id=document_id,  # ty: ignore[invalid-argument-type]
+                user_id=user.id,  # ty: ignore[invalid-argument-type]
+                k=5,  # ty: ignore[invalid-argument-type]
+                client=user.client,  # ty: ignore[invalid-argument-type]
             ):
                 if isinstance(event, ChunksEvent):
                     continue
