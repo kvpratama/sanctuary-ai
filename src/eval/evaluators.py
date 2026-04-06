@@ -3,7 +3,6 @@
 Used by ``src.eval.run`` via LangSmith ``evaluate()``.
 """
 
-from functools import lru_cache
 from typing import Annotated, TypedDict
 
 from langchain.chat_models import init_chat_model
@@ -31,11 +30,8 @@ class CorrectnessGrade(TypedDict):
 
 
 
-@lru_cache(maxsize=1)
-def _get_grader() -> Runnable:
-    """Return the cached LLM grader chain with structured output.
-
-    The grader is created once and reused across evaluator calls.
+async def _get_grader() -> Runnable:
+    """Return the LLM grader chain with structured output.
 
     Returns:
         A runnable chain that produces ``CorrectnessGrade`` dicts.
@@ -56,7 +52,7 @@ def _get_grader() -> Runnable:
         temperature=0,
     )
 
-    prompt = pull_eval_prompt("sanctuary-eval-correctness") # ty: ignore[invalid-argument-type]
+    prompt = await pull_eval_prompt("sanctuary-eval-correctness")
     return prompt | llm.with_structured_output(CorrectnessGrade)
 
 
@@ -106,7 +102,7 @@ async def correctness(run: Run, example: Example | None) -> EvaluationResult:
             comment=f"Missing required keys: {', '.join(missing)}",
         )
 
-    grader = _get_grader()
+    grader = await _get_grader()
 
     grade: CorrectnessGrade = await grader.ainvoke(
         {

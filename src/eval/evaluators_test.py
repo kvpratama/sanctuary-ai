@@ -86,17 +86,22 @@ async def test_correctness_uses_eval_api_key_when_set() -> None:
 
     get_settings.cache_clear()
 
+    async def _mock_pull_eval_prompt(name: str) -> MagicMock:
+        return MagicMock()
+
     with (
         patch("src.eval.evaluators.get_settings", return_value=mock_settings),
         patch(
             "src.eval.evaluators.init_chat_model", return_value=mock_llm
         ) as mock_init,
-        patch("src.eval.evaluators.pull_eval_prompt", return_value=MagicMock()),
+        patch(
+            "src.eval.evaluators.pull_eval_prompt",
+            side_effect=_mock_pull_eval_prompt,
+        ),
     ):
         from src.eval.evaluators import _get_grader
 
-        _get_grader.cache_clear()
-        _get_grader()
+        await _get_grader()
 
     mock_init.assert_called_once()
     call_kwargs = mock_init.call_args[1]

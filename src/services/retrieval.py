@@ -140,7 +140,7 @@ async def stream_answer_with_citations(
 
     context = "\n\n".join(context_parts)
 
-    prompt = pull_eval_prompt("sanctuary-rag-prompt")  # ty: ignore[invalid-argument-type]
+    prompt = await pull_eval_prompt("sanctuary-rag-prompt")
 
     settings = get_settings()
     llm = init_chat_model(

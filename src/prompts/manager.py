@@ -1,11 +1,12 @@
 """LangSmith dynamic prompt management with fallback handling."""
 
+import asyncio
 import logging
 from functools import lru_cache
 
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
-from langsmith import Client, traceable
+from langsmith import Client
 from langsmith.prompt_cache import configure_global_prompt_cache
 from langsmith.utils import LangSmithNotFoundError
 
@@ -63,8 +64,7 @@ def _get_client() -> Client:
     return Client()
 
 
-@traceable
-def pull_eval_prompt(name: str) -> ChatPromptTemplate:
+async def pull_eval_prompt(name: str) -> ChatPromptTemplate:
     """Pull a prompt by name from LangSmith hub, falling back to a hardcoded version.
 
     This function leverages the global prompt cache configured with a 5-minute TTL.
@@ -83,11 +83,9 @@ def pull_eval_prompt(name: str) -> ChatPromptTemplate:
     fallback = FALLBACK_PROMPTS.get(name)
     try:
         client = _get_client()
-        prompt = client.pull_prompt(name)
-        # LangSmith pull_prompt might return strings or schemas, but we assume
-        # ChatPromptTemplate for these standard RAG templates here.
+        prompt = await asyncio.to_thread(client.pull_prompt, name)
         return prompt
-    except Exception as e:
+    except (LangSmithNotFoundError, Exception) as e:
         logger.warning(
             "Failed to pull prompt %s from LangSmith: %s. Using fallback.", name, e
         )
@@ -97,19 +95,22 @@ def pull_eval_prompt(name: str) -> ChatPromptTemplate:
 
 
 def push_eval_prompts() -> None:
-    """Push all static fallback prompts to the LangSmith prompt hub.
+    """Seed fallback prompts to the LangSmith prompt hub (skip if already exists).
 
-    Expected to be run as a one-off CLI script or automatically after prompt changes.
+    This intentionally does NOT overwrite existing prompts so that prompt
+    iteration can happen via the LangSmith UI without requiring code changes
+    or a git push.  The hardcoded ``FALLBACK_PROMPTS`` serve only as initial
+    seeds and as offline fallbacks when the hub is unreachable.
     """
     logger.info("Initializing LangSmith prompt push...")
     client = _get_client()
     for name, prompt in FALLBACK_PROMPTS.items():
         try:
             client.pull_prompt(name)
-            print(f"Prompt '{name}' already exists. Skipping push.")
+            logger.info("Prompt '%s' already exists. Skipping push.", name)
             continue
         except LangSmithNotFoundError:
             url = client.push_prompt(name, object=prompt)
-            print(f"Successfully pushed '{name}': {url}")
+            logger.info("Successfully pushed '%s': %s", name, url)
         except Exception as e:
-            print(f"Error pushing '{name}': {e}")
+            logger.error("Error pushing '%s': %s", name, e)
