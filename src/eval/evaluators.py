@@ -13,6 +13,7 @@ from langsmith.evaluation import EvaluationResult
 from langsmith.schemas import Example, Run
 
 from src.config import get_settings
+from src.prompts.manager import pull_eval_prompt
 
 
 class CorrectnessGrade(TypedDict):
@@ -27,20 +28,7 @@ class CorrectnessGrade(TypedDict):
     correct: Annotated[bool, "Whether the actual answer is correct"]
 
 
-GRADING_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You are a grading assistant. Grade whether the ACTUAL answer "
-            "is correct given the EXPECTED answer. You must first respond with a brief "
-            "explanation of your reasoning, and then finally output whether the answer is correct.",
-        ),
-        (
-            "human",
-            "Question: {question}\nExpected: {expected}\nActual: {actual}",
-        ),
-    ]
-)
+
 
 
 @lru_cache(maxsize=1)
@@ -68,7 +56,8 @@ def _get_grader() -> Runnable:
         temperature=0,
     )
 
-    return GRADING_PROMPT | llm.with_structured_output(CorrectnessGrade)
+    prompt = pull_eval_prompt("sanctuary-eval-correctness") # ty: ignore[invalid-argument-type]
+    return prompt | llm.with_structured_output(CorrectnessGrade)
 
 
 def _get_outputs(obj, attr: str) -> dict:

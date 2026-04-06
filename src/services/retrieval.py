@@ -10,6 +10,7 @@ from langsmith import traceable
 
 from src.config import EMBEDDING_DIMENSIONS, get_settings
 from src.db.client import get_supabase_client
+from src.prompts.manager import pull_eval_prompt
 from src.schemas.chat import (
     ChunksEvent,
     Citation,
@@ -139,21 +140,7 @@ async def stream_answer_with_citations(
 
     context = "\n\n".join(context_parts)
 
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You are a helpful assistant that answers questions based ONLY on the "
-                "provided document content. Do not use any outside knowledge. If the "
-                "answer cannot be found in the content, say so.\n\n"
-                "Always cite your sources using [p. X] format where X is the page number.",
-            ),
-            (
-                "human",
-                "Question: {query}\n\nContext:\n{context}",
-            ),
-        ]
-    )
+    prompt = pull_eval_prompt("sanctuary-rag-prompt")  # ty: ignore[invalid-argument-type]
 
     settings = get_settings()
     llm = init_chat_model(

@@ -186,15 +186,15 @@ async def test_stream_answer_with_citations_yields_tokens_then_citations():
     with (
         patch("src.services.retrieval.get_settings", return_value=mock_settings),
         patch("src.services.retrieval.init_chat_model") as mock_init,
-        patch("src.services.retrieval.ChatPromptTemplate") as mock_prompt_cls,
+        patch("src.services.retrieval.pull_eval_prompt") as mock_pull_prompt,
     ):
-        # Mock the chain's astream by mocking the prompt's from_messages and the resulting chain
+        # Mock the chain's astream by mocking the prompt and the resulting chain
         mock_chain = MagicMock()
         mock_chain.astream = fake_astream
 
         mock_prompt_template = MagicMock()
         mock_prompt_template.__or__ = MagicMock(return_value=mock_chain)
-        mock_prompt_cls.from_messages.return_value = mock_prompt_template
+        mock_pull_prompt.return_value = mock_prompt_template
 
         mock_llm = MagicMock()
         mock_init.return_value = mock_llm
@@ -242,15 +242,15 @@ async def test_stream_answer_empty_llm_response_yields_fallback_token():
     with (
         patch("src.services.retrieval.get_settings", return_value=mock_settings),
         patch("src.services.retrieval.init_chat_model") as mock_init,
-        patch("src.services.retrieval.ChatPromptTemplate") as mock_prompt_cls,
+        patch("src.services.retrieval.pull_eval_prompt") as mock_pull_prompt,
     ):
-        # Mock the chain's astream by mocking the prompt's from_messages and the resulting chain
+        # Mock the chain's astream by mocking the prompt and the resulting chain
         mock_chain = MagicMock()
         mock_chain.astream = empty_astream
 
         mock_prompt_template = MagicMock()
         mock_prompt_template.__or__ = MagicMock(return_value=mock_chain)
-        mock_prompt_cls.from_messages.return_value = mock_prompt_template
+        mock_pull_prompt.return_value = mock_prompt_template
 
         mock_llm = MagicMock()
         mock_init.return_value = mock_llm

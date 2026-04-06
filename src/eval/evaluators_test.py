@@ -91,6 +91,7 @@ async def test_correctness_uses_eval_api_key_when_set() -> None:
         patch(
             "src.eval.evaluators.init_chat_model", return_value=mock_llm
         ) as mock_init,
+        patch("src.eval.evaluators.pull_eval_prompt", return_value=MagicMock()),
     ):
         from src.eval.evaluators import _get_grader
 
