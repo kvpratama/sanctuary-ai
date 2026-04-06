@@ -4,13 +4,10 @@ import asyncio
 import logging
 from functools import lru_cache
 
-from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from langsmith import Client
 from langsmith.prompt_cache import configure_global_prompt_cache
 from langsmith.utils import LangSmithNotFoundError
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -108,9 +105,12 @@ def push_eval_prompts() -> None:
         try:
             client.pull_prompt(name)
             logger.info("Prompt '%s' already exists. Skipping push.", name)
+            print(f"Prompt '{name}' already exists. Skipping push.")
             continue
         except LangSmithNotFoundError:
             url = client.push_prompt(name, object=prompt)
             logger.info("Successfully pushed '%s': %s", name, url)
+            print(f"Successfully pushed '{name}': {url}")
         except Exception as e:
             logger.error("Error pushing '%s': %s", name, e)
+            print(f"Error pushing '{name}': {e}")
