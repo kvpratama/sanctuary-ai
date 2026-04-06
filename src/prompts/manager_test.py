@@ -14,6 +14,7 @@ from src.prompts.manager import (
 )
 
 
+@pytest.mark.asyncio
 @patch("src.prompts.manager._get_client")
 async def test_pull_eval_prompt_success(mock_get_client: MagicMock) -> None:
     """Test that pull_eval_prompt successfully retrieves from LangSmith."""
@@ -29,6 +30,7 @@ async def test_pull_eval_prompt_success(mock_get_client: MagicMock) -> None:
     mock_client.pull_prompt.assert_called_once_with("sanctuary-test-prompt")
 
 
+@pytest.mark.asyncio
 @patch("src.prompts.manager._get_client")
 async def test_pull_eval_prompt_fallback(mock_get_client: MagicMock) -> None:
     """Test that pull_eval_prompt falls back to hardcoded templates on failure."""
@@ -49,6 +51,7 @@ async def test_pull_eval_prompt_fallback(mock_get_client: MagicMock) -> None:
     mock_client.pull_prompt.assert_called_once_with(name)
 
 
+@pytest.mark.asyncio
 @patch("src.prompts.manager._get_client")
 async def test_pull_eval_prompt_fallback_missing(mock_get_client: MagicMock) -> None:
     """Test ValueError is raised when pull fails and no fallback exists."""

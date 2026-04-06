@@ -3,6 +3,7 @@
 Used by ``src.eval.run`` via LangSmith ``evaluate()``.
 """
 
+import asyncio
 from typing import Annotated, TypedDict
 
 from langchain.chat_models import init_chat_model
@@ -13,6 +14,9 @@ from langsmith.schemas import Example, Run
 
 from src.config import get_settings
 from src.prompts.manager import pull_eval_prompt
+
+_grader_cache: Runnable | None = None
+_grader_lock: asyncio.Lock = asyncio.Lock()
 
 
 class CorrectnessGrade(TypedDict):
@@ -27,33 +31,43 @@ class CorrectnessGrade(TypedDict):
     correct: Annotated[bool, "Whether the actual answer is correct"]
 
 
-
-
-
 async def _get_grader() -> Runnable:
     """Return the LLM grader chain with structured output.
+
+    The chain is built once and cached at module level. An ``asyncio.Lock``
+    ensures only one coroutine performs the initialization under concurrency.
 
     Returns:
         A runnable chain that produces ``CorrectnessGrade`` dicts.
     """
-    settings = get_settings()
+    global _grader_cache  # noqa: PLW0603
 
-    api_key = (
-        settings.eval_llm_api_key.get_secret_value()
-        if settings.eval_llm_api_key
-        else None
-    )
+    if _grader_cache is not None:
+        return _grader_cache
 
-    llm = init_chat_model(
-        model=settings.eval_llm_model,
-        model_provider=settings.eval_llm_provider,
-        api_key=api_key,
-        base_url=settings.eval_llm_provider_base_url,
-        temperature=0,
-    )
+    async with _grader_lock:
+        if _grader_cache is not None:
+            return _grader_cache
 
-    prompt = await pull_eval_prompt("sanctuary-eval-correctness")
-    return prompt | llm.with_structured_output(CorrectnessGrade)
+        settings = get_settings()
+
+        api_key = (
+            settings.eval_llm_api_key.get_secret_value()
+            if settings.eval_llm_api_key
+            else None
+        )
+
+        llm = init_chat_model(
+            model=settings.eval_llm_model,
+            model_provider=settings.eval_llm_provider,
+            api_key=api_key,
+            base_url=settings.eval_llm_provider_base_url,
+            temperature=0,
+        )
+
+        prompt = await pull_eval_prompt("sanctuary-eval-correctness")
+        _grader_cache = prompt | llm.with_structured_output(CorrectnessGrade)
+        return _grader_cache
 
 
 def _get_outputs(obj, attr: str) -> dict:

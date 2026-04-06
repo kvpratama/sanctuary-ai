@@ -86,8 +86,7 @@ async def test_correctness_uses_eval_api_key_when_set() -> None:
 
     get_settings.cache_clear()
 
-    async def _mock_pull_eval_prompt(name: str) -> MagicMock:
-        return MagicMock()
+    mock_pull = AsyncMock(return_value=MagicMock())
 
     with (
         patch("src.eval.evaluators.get_settings", return_value=mock_settings),
@@ -96,7 +95,7 @@ async def test_correctness_uses_eval_api_key_when_set() -> None:
         ) as mock_init,
         patch(
             "src.eval.evaluators.pull_eval_prompt",
-            side_effect=_mock_pull_eval_prompt,
+            mock_pull,
         ),
     ):
         from src.eval.evaluators import _get_grader
@@ -106,3 +105,4 @@ async def test_correctness_uses_eval_api_key_when_set() -> None:
     mock_init.assert_called_once()
     call_kwargs = mock_init.call_args[1]
     assert call_kwargs["api_key"] == "eval-key-123"
+    mock_pull.assert_awaited_once_with("sanctuary-eval-correctness")

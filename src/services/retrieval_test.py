@@ -186,7 +186,10 @@ async def test_stream_answer_with_citations_yields_tokens_then_citations():
     with (
         patch("src.services.retrieval.get_settings", return_value=mock_settings),
         patch("src.services.retrieval.init_chat_model") as mock_init,
-        patch("src.services.retrieval.pull_eval_prompt") as mock_pull_prompt,
+        patch(
+            "src.services.retrieval.pull_eval_prompt",
+            new_callable=AsyncMock,
+        ) as mock_pull_prompt,
     ):
         # Mock the chain's astream by mocking the prompt and the resulting chain
         mock_chain = MagicMock()
@@ -205,6 +208,8 @@ async def test_stream_answer_with_citations_yields_tokens_then_citations():
             chunks=chunks_input,  # ty: ignore[invalid-argument-type]
         ):
             results.append(item)
+
+    mock_pull_prompt.assert_awaited_once_with("sanctuary-rag-prompt")
 
     # All items except the last are TokenEvents
     tokens = results[:-1]
@@ -242,7 +247,10 @@ async def test_stream_answer_empty_llm_response_yields_fallback_token():
     with (
         patch("src.services.retrieval.get_settings", return_value=mock_settings),
         patch("src.services.retrieval.init_chat_model") as mock_init,
-        patch("src.services.retrieval.pull_eval_prompt") as mock_pull_prompt,
+        patch(
+            "src.services.retrieval.pull_eval_prompt",
+            new_callable=AsyncMock,
+        ) as mock_pull_prompt,
     ):
         # Mock the chain's astream by mocking the prompt and the resulting chain
         mock_chain = MagicMock()
@@ -261,6 +269,8 @@ async def test_stream_answer_empty_llm_response_yields_fallback_token():
             chunks=chunks_input,  # ty: ignore[invalid-argument-type]
         ):
             results.append(item)
+
+    mock_pull_prompt.assert_awaited_once_with("sanctuary-rag-prompt")
 
     assert len(results) == 2
     assert results[0].type == "token"
