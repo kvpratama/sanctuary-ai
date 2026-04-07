@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langsmith.schemas import Example, Run
 
+from src.config import JudgeConfig
 from src.eval.evaluators import (
     correctness,
     groundedness,
@@ -32,6 +33,14 @@ def _make_example(
     return example
 
 
+def _make_judges() -> list[JudgeConfig]:
+    """Return a two-judge jury config for testing."""
+    return [
+        JudgeConfig(model="model-a", provider="openai", api_key_field="openai_api_key"),
+        JudgeConfig(model="model-b", provider="openai", api_key_field="openai_api_key"),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_correctness_returns_true_when_grader_says_correct() -> None:
     """Correctness evaluator returns score 1 when the LLM grades the answer correct."""
@@ -43,7 +52,13 @@ async def test_correctness_returns_true_when_grader_says_correct() -> None:
         }
     )
 
-    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = None
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch("src.eval.evaluators._get_grader", return_value=mock_chain),
+    ):
         result = await correctness(
             run=_make_run({"answer": "4"}),
             example=_make_example({"question": "What is 2+2?"}, {"answer": "4"}),
@@ -64,7 +79,13 @@ async def test_correctness_returns_false_when_grader_says_incorrect() -> None:
         }
     )
 
-    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = None
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch("src.eval.evaluators._get_grader", return_value=mock_chain),
+    ):
         result = await correctness(
             run=_make_run({"answer": "5"}),
             example=_make_example({"question": "What is 2+2?"}, {"answer": "4"}),
@@ -83,6 +104,7 @@ async def test_correctness_uses_eval_api_key_when_set() -> None:
     mock_settings.eval_llm_provider_base_url = "https://api.openai.com/v1"
     mock_settings.eval_llm_api_key = MagicMock()
     mock_settings.eval_llm_api_key.get_secret_value.return_value = "eval-key-123"
+    mock_settings.eval_jury_judges = None
 
     mock_llm = MagicMock()
     mock_llm.with_structured_output.return_value = MagicMock()
@@ -127,7 +149,13 @@ async def test_relevance_returns_true_when_grader_says_relevant() -> None:
         }
     )
 
-    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = None
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch("src.eval.evaluators._get_grader", return_value=mock_chain),
+    ):
         result = await relevance(
             run=_make_run({"answer": "Python is a programming language."}),
             example=_make_example({"question": "What is Python?"}, {}),
@@ -149,7 +177,13 @@ async def test_relevance_returns_false_when_grader_says_irrelevant() -> None:
         }
     )
 
-    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = None
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch("src.eval.evaluators._get_grader", return_value=mock_chain),
+    ):
         result = await relevance(
             run=_make_run({"answer": "The sky is blue."}),
             example=_make_example({"question": "What is Python?"}, {}),
@@ -185,7 +219,13 @@ async def test_groundedness_returns_true_when_grader_says_grounded() -> None:
         }
     )
 
-    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = None
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch("src.eval.evaluators._get_grader", return_value=mock_chain),
+    ):
         result = await groundedness(
             run=_make_run(
                 {
@@ -212,7 +252,13 @@ async def test_groundedness_returns_false_when_grader_says_not_grounded() -> Non
         }
     )
 
-    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = None
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch("src.eval.evaluators._get_grader", return_value=mock_chain),
+    ):
         result = await groundedness(
             run=_make_run(
                 {
@@ -253,7 +299,13 @@ async def test_retrieval_relevance_returns_true_when_docs_relevant() -> None:
         }
     )
 
-    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = None
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch("src.eval.evaluators._get_grader", return_value=mock_chain),
+    ):
         result = await retrieval_relevance(
             run=_make_run({"documents": ["Python is a programming language."]}),
             example=_make_example({"question": "What is Python?"}, {}),
@@ -275,7 +327,13 @@ async def test_retrieval_relevance_returns_false_when_docs_irrelevant() -> None:
         }
     )
 
-    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = None
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch("src.eval.evaluators._get_grader", return_value=mock_chain),
+    ):
         result = await retrieval_relevance(
             run=_make_run({"documents": ["Recipe for chocolate cake."]}),
             example=_make_example({"question": "What is Python?"}, {}),
@@ -338,3 +396,167 @@ def test_format_docs_includes_page_numbers() -> None:
 
     assert "Document 1 (Page 10):\nContent 1" in formatted
     assert "Document 2 (Page 20):\nContent 2" in formatted
+
+
+@pytest.mark.asyncio
+async def test_correctness_delegates_to_jury_when_configured() -> None:
+    """Correctness evaluator calls minority_veto when jury judges are configured."""
+    expected_result = MagicMock()
+    expected_result.key = "correctness"
+    expected_result.score = 1
+
+    judges = _make_judges()
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = judges
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch(
+            "src.eval.evaluators.minority_veto",
+            new_callable=AsyncMock,
+            return_value=expected_result,
+        ) as mock_veto,
+    ):
+        result = await correctness(
+            run=_make_run({"answer": "4"}),
+            example=_make_example({"question": "2+2?"}, {"answer": "4"}),
+        )
+
+    assert result.score == 1
+    mock_veto.assert_awaited_once()
+    call_kwargs = mock_veto.call_args[1]
+    assert call_kwargs["key"] == "correctness"
+    assert call_kwargs["score_field"] == "correct"
+    assert call_kwargs["judges"] is judges
+    assert call_kwargs["invoke_kwargs"] == {
+        "question": "2+2?",
+        "expected": "4",
+        "actual": "4",
+    }
+
+
+@pytest.mark.asyncio
+async def test_relevance_delegates_to_jury_when_configured() -> None:
+    """Relevance evaluator calls minority_veto when jury judges are configured."""
+    expected_result = MagicMock()
+    expected_result.key = "relevance"
+    expected_result.score = 0
+
+    judges = _make_judges()
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = judges
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch(
+            "src.eval.evaluators.minority_veto",
+            new_callable=AsyncMock,
+            return_value=expected_result,
+        ) as mock_veto,
+    ):
+        result = await relevance(
+            run=_make_run({"answer": "Python is great"}),
+            example=_make_example({"question": "What is Python?"}, {}),
+        )
+
+    assert result.score == 0
+    mock_veto.assert_awaited_once()
+    call_kwargs = mock_veto.call_args[1]
+    assert call_kwargs["key"] == "relevance"
+    assert call_kwargs["score_field"] == "relevant"
+    assert call_kwargs["invoke_kwargs"] == {
+        "question": "What is Python?",
+        "answer": "Python is great",
+    }
+
+
+@pytest.mark.asyncio
+async def test_groundedness_delegates_to_jury_when_configured() -> None:
+    """Groundedness evaluator calls minority_veto when jury judges are configured."""
+    expected_result = MagicMock()
+    expected_result.key = "groundedness"
+    expected_result.score = 1
+
+    judges = _make_judges()
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = judges
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch(
+            "src.eval.evaluators.minority_veto",
+            new_callable=AsyncMock,
+            return_value=expected_result,
+        ) as mock_veto,
+    ):
+        result = await groundedness(
+            run=_make_run(
+                {"answer": "The sky is blue.", "documents": ["Sky is blue."]}
+            ),
+            example=_make_example({}, {}),
+        )
+
+    assert result.score == 1
+    mock_veto.assert_awaited_once()
+    call_kwargs = mock_veto.call_args[1]
+    assert call_kwargs["key"] == "groundedness"
+    assert call_kwargs["score_field"] == "grounded"
+    # documents must be formatted via _format_docs before passing to jury
+    assert "Document 1" in call_kwargs["invoke_kwargs"]["documents"]
+
+
+@pytest.mark.asyncio
+async def test_retrieval_relevance_delegates_to_jury_when_configured() -> None:
+    """Retrieval relevance evaluator calls minority_veto when jury judges are configured."""
+    expected_result = MagicMock()
+    expected_result.key = "retrieval_relevance"
+    expected_result.score = 1
+
+    judges = _make_judges()
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = judges
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch(
+            "src.eval.evaluators.minority_veto",
+            new_callable=AsyncMock,
+            return_value=expected_result,
+        ) as mock_veto,
+    ):
+        result = await retrieval_relevance(
+            run=_make_run({"documents": ["Python info"]}),
+            example=_make_example({"question": "What is Python?"}, {}),
+        )
+
+    assert result.score == 1
+    mock_veto.assert_awaited_once()
+    call_kwargs = mock_veto.call_args[1]
+    assert call_kwargs["key"] == "retrieval_relevance"
+    assert call_kwargs["score_field"] == "relevant"
+    assert "Document 1" in call_kwargs["invoke_kwargs"]["documents"]
+
+
+@pytest.mark.asyncio
+async def test_correctness_uses_single_judge_without_jury() -> None:
+    """Correctness evaluator uses single grader when eval_jury_judges is None."""
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(
+        return_value={"explanation": "Correct.", "correct": True}
+    )
+
+    mock_settings = MagicMock()
+    mock_settings.eval_jury_judges = None
+
+    with (
+        patch("src.eval.evaluators.get_settings", return_value=mock_settings),
+        patch("src.eval.evaluators._get_grader", return_value=mock_chain),
+        patch("src.eval.evaluators.minority_veto") as mock_veto,
+    ):
+        result = await correctness(
+            run=_make_run({"answer": "4"}),
+            example=_make_example({"question": "2+2?"}, {"answer": "4"}),
+        )
+
+    assert result.score == 1
+    mock_veto.assert_not_called()

@@ -13,6 +13,7 @@ from langsmith.evaluation import EvaluationResult
 from langsmith.schemas import Example, Run
 
 from src.config import get_settings
+from src.eval.jury import minority_veto
 from src.prompts.manager import pull_eval_prompt
 from src.schemas.chat import RetrievedChunk
 
@@ -179,17 +180,27 @@ async def correctness(run: Run, example: Example | None) -> EvaluationResult:
             comment=f"Missing required keys: {', '.join(missing)}",
         )
 
+    invoke_kwargs = {
+        "question": example_inputs["question"],
+        "expected": example_outputs["answer"],
+        "actual": run_outputs["answer"],
+    }
+
+    settings = get_settings()
+    if settings.eval_jury_judges:
+        return await minority_veto(
+            key="correctness",
+            prompt_name="sanctuary-eval-correctness",
+            schema=CorrectnessGrade,
+            invoke_kwargs=invoke_kwargs,
+            score_field="correct",
+            judges=settings.eval_jury_judges,
+        )
+
     grader = await _get_grader(
         "correctness", "sanctuary-eval-correctness", CorrectnessGrade
     )
-
-    grade: CorrectnessGrade = await grader.ainvoke(
-        {
-            "question": example_inputs["question"],
-            "expected": example_outputs["answer"],
-            "actual": run_outputs["answer"],
-        }
-    )
+    grade: CorrectnessGrade = await grader.ainvoke(invoke_kwargs)
 
     return EvaluationResult(
         key="correctness",
@@ -242,14 +253,24 @@ async def relevance(run: Run, example: Example | None) -> EvaluationResult:
             comment=f"Missing required keys: {', '.join(missing)}",
         )
 
-    grader = await _get_grader("relevance", "sanctuary-eval-relevance", RelevanceGrade)
+    invoke_kwargs = {
+        "question": example_inputs["question"],
+        "answer": run_outputs["answer"],
+    }
 
-    grade: RelevanceGrade = await grader.ainvoke(
-        {
-            "question": example_inputs["question"],
-            "answer": run_outputs["answer"],
-        }
-    )
+    settings = get_settings()
+    if settings.eval_jury_judges:
+        return await minority_veto(
+            key="relevance",
+            prompt_name="sanctuary-eval-relevance",
+            schema=RelevanceGrade,
+            invoke_kwargs=invoke_kwargs,
+            score_field="relevant",
+            judges=settings.eval_jury_judges,
+        )
+
+    grader = await _get_grader("relevance", "sanctuary-eval-relevance", RelevanceGrade)
+    grade: RelevanceGrade = await grader.ainvoke(invoke_kwargs)
 
     return EvaluationResult(
         key="relevance",
@@ -303,16 +324,26 @@ async def groundedness(run: Run, example: Example | None) -> EvaluationResult:
             comment=f"Missing required keys: {', '.join(missing)}",
         )
 
+    invoke_kwargs = {
+        "answer": run_outputs["answer"],
+        "documents": _format_docs(run_outputs["documents"]),
+    }
+
+    settings = get_settings()
+    if settings.eval_jury_judges:
+        return await minority_veto(
+            key="groundedness",
+            prompt_name="sanctuary-eval-groundedness",
+            schema=GroundedGrade,
+            invoke_kwargs=invoke_kwargs,
+            score_field="grounded",
+            judges=settings.eval_jury_judges,
+        )
+
     grader = await _get_grader(
         "groundedness", "sanctuary-eval-groundedness", GroundedGrade
     )
-
-    grade: GroundedGrade = await grader.ainvoke(
-        {
-            "answer": run_outputs["answer"],
-            "documents": _format_docs(run_outputs["documents"]),
-        }
-    )
+    grade: GroundedGrade = await grader.ainvoke(invoke_kwargs)
 
     return EvaluationResult(
         key="groundedness",
@@ -368,18 +399,28 @@ async def retrieval_relevance(run: Run, example: Example | None) -> EvaluationRe
             comment=f"Missing required keys: {', '.join(missing)}",
         )
 
+    invoke_kwargs = {
+        "question": example_inputs["question"],
+        "documents": _format_docs(run_outputs["documents"]),
+    }
+
+    settings = get_settings()
+    if settings.eval_jury_judges:
+        return await minority_veto(
+            key="retrieval_relevance",
+            prompt_name="sanctuary-eval-retrieval-relevance",
+            schema=RetrievalRelevanceGrade,
+            invoke_kwargs=invoke_kwargs,
+            score_field="relevant",
+            judges=settings.eval_jury_judges,
+        )
+
     grader = await _get_grader(
         "retrieval_relevance",
         "sanctuary-eval-retrieval-relevance",
         RetrievalRelevanceGrade,
     )
-
-    grade: RetrievalRelevanceGrade = await grader.ainvoke(
-        {
-            "question": example_inputs["question"],
-            "documents": _format_docs(run_outputs["documents"]),
-        }
-    )
+    grade: RetrievalRelevanceGrade = await grader.ainvoke(invoke_kwargs)
 
     return EvaluationResult(
         key="retrieval_relevance",
