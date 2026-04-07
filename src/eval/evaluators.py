@@ -4,7 +4,7 @@ Used by ``src.eval.run`` via LangSmith ``evaluate()``.
 """
 
 import asyncio
-from typing import Annotated, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langchain.chat_models import init_chat_model
 from langchain_core.prompts import ChatPromptTemplate
@@ -14,6 +14,7 @@ from langsmith.schemas import Example, Run
 
 from src.config import get_settings
 from src.prompts.manager import pull_eval_prompt
+from src.schemas.chat import RetrievedChunk
 
 _grader_cache: dict[str, Runnable] = {}
 _grader_lock: asyncio.Lock = asyncio.Lock()
@@ -61,20 +62,27 @@ async def _get_grader(name: str, prompt_name: str, schema: type) -> Runnable:
         return _grader_cache[name]
 
 
-def _get_outputs(obj, attr: str) -> dict:
+def _get_outputs(
+    obj: Run | Example | dict[str, Any] | None, attr: str
+) -> dict[str, Any]:
     """Safely extract a dict attribute from either a RunTree or a plain dict."""
-    return (
-        (getattr(obj, attr, None) or {})
-        if hasattr(obj, attr)
-        else (obj.get(attr) or {})
-    )
+    if obj is None:
+        return {}
+
+    if hasattr(obj, attr):
+        return getattr(obj, attr, None) or {}
+
+    if isinstance(obj, dict):
+        return obj.get(attr) or {}
+
+    return {}
 
 
-def _format_docs(docs) -> str:
+def _format_docs(docs: list[RetrievedChunk] | list[dict] | list[str]) -> str:
     """Format a list of document objects or strings into a single text block with numbered headers."""
     if not hasattr(docs, "__iter__") or isinstance(docs, str):
         return str(docs)
-    
+
     parts = []
     for i, d in enumerate(docs, 1):
         if hasattr(d, "page_content"):
