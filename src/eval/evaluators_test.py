@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langsmith.schemas import Example, Run
 
-from src.eval.evaluators import correctness, relevance
+from src.eval.evaluators import correctness, groundedness, relevance
 
 
 def _make_run(outputs: Mapping[str, object]) -> Run:
@@ -163,6 +163,70 @@ async def test_relevance_missing_keys() -> None:
     )
 
     assert result.key == "relevance"
+    assert result.score == 0
+    assert result.comment is not None
+    assert "Missing required keys" in result.comment
+
+
+@pytest.mark.asyncio
+async def test_groundedness_returns_true_when_grader_says_grounded() -> None:
+    """Groundedness evaluator returns score 1 when answer is grounded in docs."""
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(
+        return_value={
+            "explanation": "All claims are supported by the documents.",
+            "grounded": True,
+        }
+    )
+
+    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+        result = await groundedness(
+            run=_make_run({
+                "answer": "The sky is blue.",
+                "documents": ["The sky appears blue due to Rayleigh scattering."],
+            }),
+            example=_make_example({}, {}),
+        )
+
+    assert result.key == "groundedness"
+    assert result.score == 1
+    assert result.comment == "All claims are supported by the documents."
+
+
+@pytest.mark.asyncio
+async def test_groundedness_returns_false_when_grader_says_not_grounded() -> None:
+    """Groundedness evaluator returns score 0 when answer is not grounded."""
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(
+        return_value={
+            "explanation": "The answer contains claims not in the documents.",
+            "grounded": False,
+        }
+    )
+
+    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+        result = await groundedness(
+            run=_make_run({
+                "answer": "Mars is red.",
+                "documents": ["The sky is blue."],
+            }),
+            example=_make_example({}, {}),
+        )
+
+    assert result.key == "groundedness"
+    assert result.score == 0
+    assert result.comment == "The answer contains claims not in the documents."
+
+
+@pytest.mark.asyncio
+async def test_groundedness_missing_keys() -> None:
+    """Groundedness evaluator returns score 0 when required keys are missing."""
+    result = await groundedness(
+        run=_make_run({}),
+        example=_make_example({}, {}),
+    )
+
+    assert result.key == "groundedness"
     assert result.score == 0
     assert result.comment is not None
     assert "Missing required keys" in result.comment

@@ -45,6 +45,23 @@ RELEVANCE_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
     ]
 )
 
+GROUNDEDNESS_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a grading assistant. Determine whether the ANSWER is grounded in "
+            "and supported by the provided DOCUMENTS. The answer should not contain "
+            "claims that cannot be traced back to the documents. You must first respond "
+            "with a brief explanation of your reasoning, and then finally output whether "
+            "the answer is grounded.",
+        ),
+        (
+            "human",
+            "Answer: {answer}\nDocuments: {documents}",
+        ),
+    ]
+)
+
 RAG_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
     [
         (
@@ -64,6 +81,7 @@ RAG_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
 FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-eval-correctness": CORRECTNESS_PROMPT_HARDCODED,
     "sanctuary-eval-relevance": RELEVANCE_PROMPT_HARDCODED,
+    "sanctuary-eval-groundedness": GROUNDEDNESS_PROMPT_HARDCODED,
     "sanctuary-rag-prompt": RAG_PROMPT_HARDCODED,
 }
 

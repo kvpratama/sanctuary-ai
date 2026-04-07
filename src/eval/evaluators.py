@@ -196,3 +196,64 @@ async def relevance(run: Run, example: Example | None) -> EvaluationResult:
         score=1 if grade["relevant"] else 0,
         comment=grade["explanation"],
     )
+
+
+class GroundedGrade(TypedDict):
+    """Structured output schema for the groundedness grader.
+
+    Attributes:
+        explanation: Brief reasoning for the grade.
+        grounded: Whether the answer is grounded in the retrieved documents.
+    """
+
+    explanation: Annotated[str, "Brief reasoning for the grade"]
+    grounded: Annotated[bool, "Whether the answer is grounded in the retrieved documents"]
+
+
+async def groundedness(run: Run, example: Example | None) -> EvaluationResult:
+    """LLM-as-judge evaluator that checks answer groundedness.
+
+    Determines whether the target function's answer is grounded in and
+    supported by the retrieved documents, without hallucinated claims.
+
+    Args:
+        run: The LangSmith run object containing the target function's outputs
+            (must include ``answer`` and ``documents`` keys).
+        example: The LangSmith dataset example (unused but required by
+            the evaluator signature).
+
+    Returns:
+        An ``EvaluationResult`` with ``key`` set to ``groundedness``, ``score``
+        of 1 or 0, and a ``comment`` containing the grader's explanation.
+    """
+    run_outputs = _get_outputs(run, "outputs")
+
+    missing = []
+    if "answer" not in run_outputs:
+        missing.append("answer (run.outputs)")
+    if "documents" not in run_outputs:
+        missing.append("documents (run.outputs)")
+
+    if missing:
+        return EvaluationResult(
+            key="groundedness",
+            score=0,
+            comment=f"Missing required keys: {', '.join(missing)}",
+        )
+
+    grader = await _get_grader(
+        "groundedness", "sanctuary-eval-groundedness", GroundedGrade
+    )
+
+    grade: GroundedGrade = await grader.ainvoke(
+        {
+            "answer": run_outputs["answer"],
+            "documents": str(run_outputs["documents"]),
+        }
+    )
+
+    return EvaluationResult(
+        key="groundedness",
+        score=1 if grade["grounded"] else 0,
+        comment=grade["explanation"],
+    )
