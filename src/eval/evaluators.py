@@ -15,39 +15,30 @@ from langsmith.schemas import Example, Run
 from src.config import get_settings
 from src.prompts.manager import pull_eval_prompt
 
-_grader_cache: Runnable | None = None
+_grader_cache: dict[str, Runnable] = {}
 _grader_lock: asyncio.Lock = asyncio.Lock()
 
 
-class CorrectnessGrade(TypedDict):
-    """Structured output schema for the correctness grader.
+async def _get_grader(name: str, prompt_name: str, schema: type) -> Runnable:
+    """Return a cached LLM grader chain for the given evaluator.
 
-    Attributes:
-        explanation: Brief reasoning for the grade.
-        correct: Whether the actual answer is correct.
-    """
+    Builds the chain on first call for each ``name`` and caches it.
+    An ``asyncio.Lock`` ensures only one coroutine performs initialization.
 
-    explanation: Annotated[str, "Brief reasoning for the grade"]
-    correct: Annotated[bool, "Whether the actual answer is correct"]
-
-
-async def _get_grader() -> Runnable:
-    """Return the LLM grader chain with structured output.
-
-    The chain is built once and cached at module level. An ``asyncio.Lock``
-    ensures only one coroutine performs the initialization under concurrency.
+    Args:
+        name: Unique cache key for this grader (e.g. ``"correctness"``).
+        prompt_name: LangSmith prompt hub name to pull.
+        schema: TypedDict class for structured output.
 
     Returns:
-        A runnable chain that produces ``CorrectnessGrade`` dicts.
+        A runnable chain that produces dicts matching ``schema``.
     """
-    global _grader_cache  # noqa: PLW0603
-
-    if _grader_cache is not None:
-        return _grader_cache
+    if name in _grader_cache:
+        return _grader_cache[name]
 
     async with _grader_lock:
-        if _grader_cache is not None:
-            return _grader_cache
+        if name in _grader_cache:
+            return _grader_cache[name]
 
         settings = get_settings()
 
@@ -65,9 +56,9 @@ async def _get_grader() -> Runnable:
             temperature=0,
         )
 
-        prompt = await pull_eval_prompt("sanctuary-eval-correctness")
-        _grader_cache = prompt | llm.with_structured_output(CorrectnessGrade)
-        return _grader_cache
+        prompt = await pull_eval_prompt(prompt_name)
+        _grader_cache[name] = prompt | llm.with_structured_output(schema)
+        return _grader_cache[name]
 
 
 def _get_outputs(obj, attr: str) -> dict:
@@ -77,6 +68,18 @@ def _get_outputs(obj, attr: str) -> dict:
         if hasattr(obj, attr)
         else (obj.get(attr) or {})
     )
+
+
+class CorrectnessGrade(TypedDict):
+    """Structured output schema for the correctness grader.
+
+    Attributes:
+        explanation: Brief reasoning for the grade.
+        correct: Whether the actual answer is correct.
+    """
+
+    explanation: Annotated[str, "Brief reasoning for the grade"]
+    correct: Annotated[bool, "Whether the actual answer is correct"]
 
 
 async def correctness(run: Run, example: Example | None) -> EvaluationResult:
@@ -116,7 +119,9 @@ async def correctness(run: Run, example: Example | None) -> EvaluationResult:
             comment=f"Missing required keys: {', '.join(missing)}",
         )
 
-    grader = await _get_grader()
+    grader = await _get_grader(
+        "correctness", "sanctuary-eval-correctness", CorrectnessGrade
+    )
 
     grade: CorrectnessGrade = await grader.ainvoke(
         {
@@ -129,5 +134,65 @@ async def correctness(run: Run, example: Example | None) -> EvaluationResult:
     return EvaluationResult(
         key="correctness",
         score=1 if grade["correct"] else 0,
+        comment=grade["explanation"],
+    )
+
+
+class RelevanceGrade(TypedDict):
+    """Structured output schema for the relevance grader.
+
+    Attributes:
+        explanation: Brief reasoning for the grade.
+        relevant: Whether the answer is relevant to the question.
+    """
+
+    explanation: Annotated[str, "Brief reasoning for the grade"]
+    relevant: Annotated[bool, "Whether the answer is relevant to the question"]
+
+
+async def relevance(run: Run, example: Example | None) -> EvaluationResult:
+    """LLM-as-judge evaluator that checks answer relevance.
+
+    Determines whether the target function's answer is relevant to and
+    addresses the original question, regardless of correctness.
+
+    Args:
+        run: The LangSmith run object containing the target function's outputs
+            (must include an ``answer`` key).
+        example: The LangSmith dataset example containing inputs
+            (must include ``question``).
+
+    Returns:
+        An ``EvaluationResult`` with ``key`` set to ``relevance``, ``score``
+        of 1 or 0, and a ``comment`` containing the grader's explanation.
+    """
+    run_outputs = _get_outputs(run, "outputs")
+    example_inputs = _get_outputs(example, "inputs")
+
+    missing = []
+    if "question" not in example_inputs:
+        missing.append("question (example.inputs)")
+    if "answer" not in run_outputs:
+        missing.append("answer (run.outputs)")
+
+    if missing:
+        return EvaluationResult(
+            key="relevance",
+            score=0,
+            comment=f"Missing required keys: {', '.join(missing)}",
+        )
+
+    grader = await _get_grader("relevance", "sanctuary-eval-relevance", RelevanceGrade)
+
+    grade: RelevanceGrade = await grader.ainvoke(
+        {
+            "question": example_inputs["question"],
+            "answer": run_outputs["answer"],
+        }
+    )
+
+    return EvaluationResult(
+        key="relevance",
+        score=1 if grade["relevant"] else 0,
         comment=grade["explanation"],
     )

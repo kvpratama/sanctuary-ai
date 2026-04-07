@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langsmith.schemas import Example, Run
 
-from src.eval.evaluators import correctness
+from src.eval.evaluators import correctness, relevance
 
 
 def _make_run(outputs: Mapping[str, object]) -> Run:
@@ -81,10 +81,12 @@ async def test_correctness_uses_eval_api_key_when_set() -> None:
     mock_llm = MagicMock()
     mock_llm.with_structured_output.return_value = MagicMock()
 
-    # Clear the global get_settings cache so prior calls don't leak into this test.
+    # Clear caches so prior calls don't leak into this test.
     from src.config import get_settings
+    from src.eval import evaluators
 
     get_settings.cache_clear()
+    evaluators._grader_cache.clear()
 
     mock_pull = AsyncMock(return_value=MagicMock())
 
@@ -98,11 +100,69 @@ async def test_correctness_uses_eval_api_key_when_set() -> None:
             mock_pull,
         ),
     ):
-        from src.eval.evaluators import _get_grader
+        from src.eval.evaluators import CorrectnessGrade, _get_grader
 
-        await _get_grader()
+        await _get_grader("correctness", "sanctuary-eval-correctness", CorrectnessGrade)
 
     mock_init.assert_called_once()
     call_kwargs = mock_init.call_args[1]
     assert call_kwargs["api_key"] == "eval-key-123"
     mock_pull.assert_awaited_once_with("sanctuary-eval-correctness")
+
+
+@pytest.mark.asyncio
+async def test_relevance_returns_true_when_grader_says_relevant() -> None:
+    """Relevance evaluator returns score 1 when the LLM says the answer is relevant."""
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(
+        return_value={
+            "explanation": "The answer addresses the question.",
+            "relevant": True,
+        }
+    )
+
+    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+        result = await relevance(
+            run=_make_run({"answer": "Python is a programming language."}),
+            example=_make_example({"question": "What is Python?"}, {}),
+        )
+
+    assert result.key == "relevance"
+    assert result.score == 1
+    assert result.comment == "The answer addresses the question."
+
+
+@pytest.mark.asyncio
+async def test_relevance_returns_false_when_grader_says_irrelevant() -> None:
+    """Relevance evaluator returns score 0 when the LLM says the answer is irrelevant."""
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(
+        return_value={
+            "explanation": "The answer is off-topic.",
+            "relevant": False,
+        }
+    )
+
+    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+        result = await relevance(
+            run=_make_run({"answer": "The sky is blue."}),
+            example=_make_example({"question": "What is Python?"}, {}),
+        )
+
+    assert result.key == "relevance"
+    assert result.score == 0
+    assert result.comment == "The answer is off-topic."
+
+
+@pytest.mark.asyncio
+async def test_relevance_missing_keys() -> None:
+    """Relevance evaluator returns score 0 when required keys are missing."""
+    result = await relevance(
+        run=_make_run({}),
+        example=_make_example({}, {}),
+    )
+
+    assert result.key == "relevance"
+    assert result.score == 0
+    assert result.comment is not None
+    assert "Missing required keys" in result.comment
