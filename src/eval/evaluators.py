@@ -70,6 +70,23 @@ def _get_outputs(obj, attr: str) -> dict:
     )
 
 
+def _format_docs(docs) -> str:
+    """Format a list of document objects or strings into a single text block with numbered headers."""
+    if not hasattr(docs, "__iter__") or isinstance(docs, str):
+        return str(docs)
+    
+    parts = []
+    for i, d in enumerate(docs, 1):
+        if hasattr(d, "page_content"):
+            content = d.page_content
+        elif isinstance(d, dict) and "page_content" in d:
+            content = d["page_content"]
+        else:
+            content = str(d)
+        parts.append(f"Document {i}:\n{content}")
+    return "\n\n".join(parts)
+
+
 class CorrectnessGrade(TypedDict):
     """Structured output schema for the correctness grader.
 
@@ -250,7 +267,7 @@ async def groundedness(run: Run, example: Example | None) -> EvaluationResult:
     grade: GroundedGrade = await grader.ainvoke(
         {
             "answer": run_outputs["answer"],
-            "documents": str(run_outputs["documents"]),
+            "documents": _format_docs(run_outputs["documents"]),
         }
     )
 
@@ -317,7 +334,7 @@ async def retrieval_relevance(run: Run, example: Example | None) -> EvaluationRe
     grade: RetrievalRelevanceGrade = await grader.ainvoke(
         {
             "question": example_inputs["question"],
-            "documents": str(run_outputs["documents"]),
+            "documents": _format_docs(run_outputs["documents"]),
         }
     )
 
