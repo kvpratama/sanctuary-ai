@@ -1,4 +1,4 @@
-"""Tests for the eval correctness evaluator."""
+"""Tests for the eval evaluators: correctness, relevance, groundedness, and retrieval_relevance."""
 
 from typing import Mapping
 from unittest.mock import AsyncMock, MagicMock, patch
