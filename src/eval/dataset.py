@@ -6,13 +6,14 @@ before running end-to-end evaluation.
 
 import hashlib
 import json
+from typing import Any
 
 from langsmith import Client
 
 DATASET_NAME = "sanctuary"
 
 
-examples: list[dict] = [
+examples: list[dict[str, Any]] = [
     {
         "inputs": {
             "question": "How do I handle data distribution shifts in a live environment?",
@@ -67,7 +68,7 @@ To fix these failures and increase future reliability, the most common industry 
 ]
 
 
-def get_content_hash(inputs: dict, outputs: dict) -> str:
+def get_content_hash(inputs: dict[str, Any], outputs: dict[str, Any]) -> str:
     """Generate a unique SHA-256 hash from combined inputs and outputs.
 
     Args:

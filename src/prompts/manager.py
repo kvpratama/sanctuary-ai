@@ -29,6 +29,55 @@ CORRECTNESS_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
     ]
 )
 
+RELEVANCE_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a grading assistant. Determine whether the ANSWER is relevant to "
+            "the QUESTION. The answer does not need to be correct, only on-topic and "
+            "responsive to what was asked. You must first respond with a brief explanation "
+            "of your reasoning, and then finally output whether the answer is relevant.",
+        ),
+        (
+            "human",
+            "Question: {question}\nAnswer: {answer}",
+        ),
+    ]
+)
+
+GROUNDEDNESS_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a grading assistant. Determine whether the ANSWER is grounded in "
+            "and supported by the provided DOCUMENTS. The answer should not contain "
+            "claims that cannot be traced back to the documents. You must first respond "
+            "with a brief explanation of your reasoning, and then finally output whether "
+            "the answer is grounded.",
+        ),
+        (
+            "human",
+            "Answer: {answer}\nDocuments: {documents}",
+        ),
+    ]
+)
+
+RETRIEVAL_RELEVANCE_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a grading assistant. Determine whether the retrieved DOCUMENTS are "
+            "relevant to the QUESTION. The documents should contain information that could "
+            "help answer the question. You must first respond with a brief explanation of "
+            "your reasoning, and then finally output whether the documents are relevant.",
+        ),
+        (
+            "human",
+            "Question: {question}\nDocuments: {documents}",
+        ),
+    ]
+)
+
 RAG_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
     [
         (
@@ -47,6 +96,9 @@ RAG_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
 
 FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-eval-correctness": CORRECTNESS_PROMPT_HARDCODED,
+    "sanctuary-eval-relevance": RELEVANCE_PROMPT_HARDCODED,
+    "sanctuary-eval-groundedness": GROUNDEDNESS_PROMPT_HARDCODED,
+    "sanctuary-eval-retrieval-relevance": RETRIEVAL_RELEVANCE_PROMPT_HARDCODED,
     "sanctuary-rag-prompt": RAG_PROMPT_HARDCODED,
 }
 
