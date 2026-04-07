@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langsmith.schemas import Example, Run
 
-from src.eval.evaluators import correctness, groundedness, relevance
+from src.eval.evaluators import (
+    correctness,
+    groundedness,
+    relevance,
+    retrieval_relevance,
+)
 
 
 def _make_run(outputs: Mapping[str, object]) -> Run:
@@ -181,10 +186,12 @@ async def test_groundedness_returns_true_when_grader_says_grounded() -> None:
 
     with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
         result = await groundedness(
-            run=_make_run({
-                "answer": "The sky is blue.",
-                "documents": ["The sky appears blue due to Rayleigh scattering."],
-            }),
+            run=_make_run(
+                {
+                    "answer": "The sky is blue.",
+                    "documents": ["The sky appears blue due to Rayleigh scattering."],
+                }
+            ),
             example=_make_example({}, {}),
         )
 
@@ -206,10 +213,12 @@ async def test_groundedness_returns_false_when_grader_says_not_grounded() -> Non
 
     with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
         result = await groundedness(
-            run=_make_run({
-                "answer": "Mars is red.",
-                "documents": ["The sky is blue."],
-            }),
+            run=_make_run(
+                {
+                    "answer": "Mars is red.",
+                    "documents": ["The sky is blue."],
+                }
+            ),
             example=_make_example({}, {}),
         )
 
@@ -227,6 +236,64 @@ async def test_groundedness_missing_keys() -> None:
     )
 
     assert result.key == "groundedness"
+    assert result.score == 0
+    assert result.comment is not None
+    assert "Missing required keys" in result.comment
+
+
+@pytest.mark.asyncio
+async def test_retrieval_relevance_returns_true_when_docs_relevant() -> None:
+    """Retrieval relevance evaluator returns score 1 when docs are relevant."""
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(
+        return_value={
+            "explanation": "The documents contain relevant information.",
+            "relevant": True,
+        }
+    )
+
+    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+        result = await retrieval_relevance(
+            run=_make_run({"documents": ["Python is a programming language."]}),
+            example=_make_example({"question": "What is Python?"}, {}),
+        )
+
+    assert result.key == "retrieval_relevance"
+    assert result.score == 1
+    assert result.comment == "The documents contain relevant information."
+
+
+@pytest.mark.asyncio
+async def test_retrieval_relevance_returns_false_when_docs_irrelevant() -> None:
+    """Retrieval relevance evaluator returns score 0 when docs are irrelevant."""
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(
+        return_value={
+            "explanation": "The documents are not related to the question.",
+            "relevant": False,
+        }
+    )
+
+    with patch("src.eval.evaluators._get_grader", return_value=mock_chain):
+        result = await retrieval_relevance(
+            run=_make_run({"documents": ["Recipe for chocolate cake."]}),
+            example=_make_example({"question": "What is Python?"}, {}),
+        )
+
+    assert result.key == "retrieval_relevance"
+    assert result.score == 0
+    assert result.comment == "The documents are not related to the question."
+
+
+@pytest.mark.asyncio
+async def test_retrieval_relevance_missing_keys() -> None:
+    """Retrieval relevance evaluator returns score 0 when required keys are missing."""
+    result = await retrieval_relevance(
+        run=_make_run({}),
+        example=_make_example({}, {}),
+    )
+
+    assert result.key == "retrieval_relevance"
     assert result.score == 0
     assert result.comment is not None
     assert "Missing required keys" in result.comment

@@ -11,7 +11,12 @@ from dotenv import load_dotenv
 from langsmith import Client, aevaluate
 
 from src.eval.dataset import ensure_dataset
-from src.eval.evaluators import correctness, groundedness, relevance
+from src.eval.evaluators import (
+    correctness,
+    groundedness,
+    relevance,
+    retrieval_relevance,
+)
 from src.eval.target import target
 
 
@@ -30,12 +35,10 @@ async def main() -> None:
     results = await aevaluate(
         target,
         data=dataset_name,
-        evaluators=[correctness, relevance, groundedness],
+        evaluators=[correctness, relevance, groundedness, retrieval_relevance],
         experiment_prefix="sanctuary",
         max_concurrency=1,
     )
-
-    print(results)
 
 
 if __name__ == "__main__":

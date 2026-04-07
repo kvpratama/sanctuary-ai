@@ -207,7 +207,9 @@ class GroundedGrade(TypedDict):
     """
 
     explanation: Annotated[str, "Brief reasoning for the grade"]
-    grounded: Annotated[bool, "Whether the answer is grounded in the retrieved documents"]
+    grounded: Annotated[
+        bool, "Whether the answer is grounded in the retrieved documents"
+    ]
 
 
 async def groundedness(run: Run, example: Example | None) -> EvaluationResult:
@@ -255,5 +257,72 @@ async def groundedness(run: Run, example: Example | None) -> EvaluationResult:
     return EvaluationResult(
         key="groundedness",
         score=1 if grade["grounded"] else 0,
+        comment=grade["explanation"],
+    )
+
+
+class RetrievalRelevanceGrade(TypedDict):
+    """Structured output schema for the retrieval relevance grader.
+
+    Attributes:
+        explanation: Brief reasoning for the grade.
+        relevant: Whether the retrieved documents are relevant to the question.
+    """
+
+    explanation: Annotated[str, "Brief reasoning for the grade"]
+    relevant: Annotated[
+        bool, "Whether the retrieved documents are relevant to the question"
+    ]
+
+
+async def retrieval_relevance(run: Run, example: Example | None) -> EvaluationResult:
+    """LLM-as-judge evaluator that checks retrieval relevance.
+
+    Determines whether the retrieved documents are relevant to and
+    contain information useful for answering the original question.
+
+    Args:
+        run: The LangSmith run object containing the target function's outputs
+            (must include a ``documents`` key).
+        example: The LangSmith dataset example containing inputs
+            (must include ``question``).
+
+    Returns:
+        An ``EvaluationResult`` with ``key`` set to ``retrieval_relevance``,
+        ``score`` of 1 or 0, and a ``comment`` containing the grader's
+        explanation.
+    """
+    run_outputs = _get_outputs(run, "outputs")
+    example_inputs = _get_outputs(example, "inputs")
+
+    missing = []
+    if "question" not in example_inputs:
+        missing.append("question (example.inputs)")
+    if "documents" not in run_outputs:
+        missing.append("documents (run.outputs)")
+
+    if missing:
+        return EvaluationResult(
+            key="retrieval_relevance",
+            score=0,
+            comment=f"Missing required keys: {', '.join(missing)}",
+        )
+
+    grader = await _get_grader(
+        "retrieval_relevance",
+        "sanctuary-eval-retrieval-relevance",
+        RetrievalRelevanceGrade,
+    )
+
+    grade: RetrievalRelevanceGrade = await grader.ainvoke(
+        {
+            "question": example_inputs["question"],
+            "documents": str(run_outputs["documents"]),
+        }
+    )
+
+    return EvaluationResult(
+        key="retrieval_relevance",
+        score=1 if grade["relevant"] else 0,
         comment=grade["explanation"],
     )
