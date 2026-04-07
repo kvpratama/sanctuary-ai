@@ -12,6 +12,7 @@ from src.eval.evaluators import (
     relevance,
     retrieval_relevance,
 )
+from src.schemas.chat import RetrievedChunk
 
 
 def _make_run(outputs: Mapping[str, object]) -> Run:
@@ -297,3 +298,43 @@ async def test_retrieval_relevance_missing_keys() -> None:
     assert result.score == 0
     assert result.comment is not None
     assert "Missing required keys" in result.comment
+
+
+@pytest.mark.asyncio
+async def test_get_outputs_handles_all_types() -> None:
+    """_get_outputs safely extracts attributes from Runs, Examples, dicts, or None."""
+    from src.eval.evaluators import _get_outputs
+
+    # Case 1: None
+    assert _get_outputs(None, "outputs") == {}
+
+    # Case 2: Dictionary
+    data = {"outputs": {"key": "value"}}
+    assert _get_outputs(data, "outputs") == {"key": "value"}
+    assert _get_outputs(data, "missing") == {}
+
+    # Case 3: Mock Run (getattr)
+    run = MagicMock(spec=Run)
+    run.outputs = {"a": 1}
+    assert _get_outputs(run, "outputs") == {"a": 1}
+    assert _get_outputs(run, "missing") == {}
+
+    # Case 4: Mock Example (getattr)
+    example = MagicMock(spec=Example)
+    example.inputs = {"q": "test"}
+    assert _get_outputs(example, "inputs") == {"q": "test"}
+
+
+def test_format_docs_includes_page_numbers() -> None:
+    """_format_docs includes page numbers when RetrievedChunk objects are provided."""
+    from src.eval.evaluators import _format_docs
+
+    docs = [
+        RetrievedChunk(page_content="Content 1", page=10),
+        RetrievedChunk(page_content="Content 2", page=20),
+    ]
+
+    formatted = _format_docs(docs)
+
+    assert "Document 1 (Page 10):\nContent 1" in formatted
+    assert "Document 2 (Page 20):\nContent 2" in formatted

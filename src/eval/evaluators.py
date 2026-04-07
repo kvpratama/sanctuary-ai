@@ -65,33 +65,68 @@ async def _get_grader(name: str, prompt_name: str, schema: type) -> Runnable:
 def _get_outputs(
     obj: Run | Example | dict[str, Any] | None, attr: str
 ) -> dict[str, Any]:
-    """Safely extract a dict attribute from either a RunTree or a plain dict."""
+    """Safely extract a dict attribute from a Run, Example, or plain dict.
+
+    Args:
+        obj: The object to extract from. Accepts a LangSmith Run, Example,
+            a plain dict, or None.
+        attr: The attribute or key name to look up (e.g. ``"outputs"``).
+
+    Returns:
+        The value at ``attr`` as a dict, or an empty dict if the attribute
+        is missing, None, or the object itself is None.
+    """
     if obj is None:
         return {}
-
-    if hasattr(obj, attr):
-        return getattr(obj, attr, None) or {}
 
     if isinstance(obj, dict):
         return obj.get(attr) or {}
 
-    return {}
+    return getattr(obj, attr, None) or {}
 
 
-def _format_docs(docs: list[RetrievedChunk] | list[dict] | list[str]) -> str:
-    """Format a list of document objects or strings into a single text block with numbered headers."""
-    if not hasattr(docs, "__iter__") or isinstance(docs, str):
-        return str(docs)
+def _format_docs(docs: list[RetrievedChunk]) -> str:
+    """Format retrieved chunks into a numbered text block.
+
+    Args:
+        docs: A list of retrieved chunks to format. Each item can be a
+            LangChain Document object, a RetrievedChunk, a dict with a
+            ``page_content`` key, or any object coercible to string.
+            If a plain string is passed, it is returned as-is.
+
+    Returns:
+        A single string where each document is separated by a blank line,
+        prefixed with a numbered header and an optional page number, e.g.::
+
+            Document 1 (Page 3):
+            Some content here
+
+            Document 2:
+            More content here
+    """
+    if isinstance(docs, str):
+        return docs
 
     parts = []
     for i, d in enumerate(docs, 1):
         if hasattr(d, "page_content"):
             content = d.page_content
-        elif isinstance(d, dict) and "page_content" in d:
-            content = d["page_content"]
+            if hasattr(d, "page"):
+                page = d.page
+            elif hasattr(d, "metadata") and isinstance(d.metadata, dict):
+                page = d.metadata.get("page")
+            else:
+                page = None
+        elif isinstance(d, dict):
+            content = d.get("page_content", str(d))
+            page = d.get("page")
         else:
             content = str(d)
-        parts.append(f"Document {i}:\n{content}")
+            page = None
+
+        page_str = f" (Page {page})" if page is not None else ""
+        parts.append(f"Document {i}{page_str}:\n{content}")
+
     return "\n\n".join(parts)
 
 
