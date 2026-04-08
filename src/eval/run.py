@@ -10,6 +10,7 @@ import asyncio
 from dotenv import load_dotenv
 from langsmith import Client, aevaluate
 
+from src.config import get_settings
 from src.eval.dataset import ensure_dataset
 from src.eval.evaluators import (
     correctness,
@@ -28,6 +29,13 @@ async def main() -> None:
     evaluator.
     """
     load_dotenv()
+
+    settings = get_settings()
+    if settings.eval_jury_judges:
+        judge_names = [j.model for j in settings.eval_jury_judges]
+        print(f"Jury mode: {len(judge_names)} judges — {', '.join(judge_names)}")
+    else:
+        print("Single-judge mode (no EVAL_JURY_JUDGES configured)")
 
     client = Client()
     dataset_name = ensure_dataset(client)

@@ -3,7 +3,13 @@
 import pytest
 from pydantic import SecretStr
 
-from src.config import CHUNK_OVERLAP, CHUNK_SIZE, EMBEDDING_DIMENSIONS, Settings
+from src.config import (
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    EMBEDDING_DIMENSIONS,
+    JudgeConfig,
+    Settings,
+)
 
 
 def test_configuration_constants():
@@ -115,3 +121,43 @@ def test_settings_loads_supabase_anon_key(monkeypatch: pytest.MonkeyPatch) -> No
     settings = Settings(_env_file=None)  # ty:ignore[missing-argument,unknown-argument]
     assert settings.supabase_anon_key.get_secret_value() == "test-anon-key"
     assert isinstance(settings.supabase_anon_key, SecretStr)
+
+
+def test_settings_parses_eval_jury_judges(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Settings parses EVAL_JURY_JUDGES JSON into list[JudgeConfig]."""
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "test-key")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "test-anon-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini")
+    monkeypatch.setenv("BOOKIFIED_BLOB_READ_WRITE_TOKEN", "test-blob")
+    monkeypatch.setenv(
+        "EVAL_JURY_JUDGES",
+        '[{"model":"gpt-4o","provider":"openai","api_key_field":"openai_api_key","base_url":""},{"model":"claude-sonnet","provider":"anthropic","api_key_field":"openai_api_key","base_url":"https://custom.api"}]',
+    )
+
+    settings = Settings(_env_file=None)  # ty:ignore[missing-argument,unknown-argument]
+
+    assert settings.eval_jury_judges is not None
+    assert len(settings.eval_jury_judges) == 2
+    assert settings.eval_jury_judges[0].model == "gpt-4o"
+    assert settings.eval_jury_judges[0].provider == "openai"
+    assert settings.eval_jury_judges[0].api_key_field == "openai_api_key"
+    assert settings.eval_jury_judges[1].model == "claude-sonnet"
+    assert settings.eval_jury_judges[1].base_url == "https://custom.api"
+
+
+def test_settings_eval_jury_judges_defaults_to_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Settings defaults eval_jury_judges to None when env var is absent."""
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "test-key")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "test-anon-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini")
+    monkeypatch.setenv("BOOKIFIED_BLOB_READ_WRITE_TOKEN", "test-blob")
+    monkeypatch.delenv("EVAL_JURY_JUDGES", raising=False)
+
+    settings = Settings(_env_file=None)  # ty:ignore[missing-argument,unknown-argument]
+    assert settings.eval_jury_judges is None

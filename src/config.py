@@ -1,11 +1,27 @@
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 EMBEDDING_DIMENSIONS = 768
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
+
+
+class JudgeConfig(BaseModel):
+    """Configuration for a single LLM judge in the evaluation jury.
+
+    Attributes:
+        model: Model name (e.g. "gpt-4o", "claude-sonnet").
+        provider: LangChain provider id (e.g. "openai", "anthropic").
+        api_key_field: Name of a SecretStr field on Settings holding the API key.
+        base_url: Optional custom API endpoint. Empty string means use provider default.
+    """
+
+    model: str
+    provider: str
+    api_key_field: str
+    base_url: str = ""
 
 
 class Settings(BaseSettings):
@@ -35,6 +51,7 @@ class Settings(BaseSettings):
             eval_llm_provider: LLM provider for evaluations (default: openai).
             eval_llm_provider_base_url: Base URL for evaluation LLM provider API.
             eval_llm_api_key: API key for evaluation LLM (optional, falls back to openai_api_key).
+            eval_jury_judges: List of judge configurations for jury-of-judges evaluation (optional).
             langsmith_api_key: LangSmith API key for tracing (optional).
             langsmith_project: LangSmith project name (default: default).
     """
@@ -72,6 +89,10 @@ class Settings(BaseSettings):
     eval_llm_provider: str = "openai"
     eval_llm_provider_base_url: str = "https://api.openai.com/v1"
     eval_llm_api_key: SecretStr | None = None
+    cerebras_api_key: SecretStr | None = None
+
+    # Jury-of-judges configuration (optional JSON array of judge configs)
+    eval_jury_judges: list[JudgeConfig] | None = None
 
     # LangSmith configuration
     langsmith_api_key: SecretStr | None = None
