@@ -24,7 +24,8 @@ async def _build_judge_grader(
 ) -> Runnable:
     """Return a cached grader chain for a specific judge configuration.
 
-    Builds the chain on first call for each ``(model, provider, prompt_name)``
+    Builds the chain on first call for each
+    ``(model, provider, api_key_field, base_url, prompt_name)``
     combination and caches it. An ``asyncio.Lock`` ensures only one coroutine
     performs initialization.
 
@@ -40,7 +41,7 @@ async def _build_judge_grader(
         ValueError: If ``api_key_field`` does not exist on Settings or is not
             a ``SecretStr``.
     """
-    cache_key = f"{judge.model}:{judge.provider}:{prompt_name}"
+    cache_key = f"{judge.model}:{judge.provider}:{judge.api_key_field}:{judge.base_url}:{prompt_name}"
     if cache_key in _judge_grader_cache:
         return _judge_grader_cache[cache_key]
 
