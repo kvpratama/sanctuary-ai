@@ -105,22 +105,37 @@ async def minority_veto(
     async def _grade_with_judge(
         judge: JudgeConfig,
     ) -> tuple[JudgeConfig, dict[str, Any]]:
+        """Run a single judge and return its config with the grade dict.
+
+        Args:
+            judge: The judge configuration to evaluate with.
+
+        Returns:
+            A tuple of the judge config and its structured grade output.
+        """
         grader = await _build_judge_grader(judge, prompt_name, schema)
         return judge, await grader.ainvoke(invoke_kwargs)
 
-    results = await asyncio.gather(*[_grade_with_judge(j) for j in judges])
+    results = await asyncio.gather(
+        *[_grade_with_judge(j) for j in judges], return_exceptions=True
+    )
 
     explanations: list[str] = []
     all_pass = True
-    for judge, grade in results:
-        explanations.append(
-            f"[{judge.model}] {'pass' if grade[score_field] else 'fail'}: {grade['explanation']}"
-        )
-        if not grade[score_field]:
+    for judge, result_item in zip(judges, results):
+        if isinstance(result_item, Exception):
+            explanations.append(f"[{judge.model}] fail: exception: {result_item}")
             all_pass = False
+        else:
+            _, grade = result_item
+            explanations.append(
+                f"[{judge.model}] {'pass' if grade[score_field] else 'fail'}: {grade['explanation']}"
+            )
+            if not grade[score_field]:
+                all_pass = False
 
     return EvaluationResult(
         key=key,
         score=1 if all_pass else 0,
-        comment=" | ".join(explanations),
+        comment="- " + "\n- ".join(explanations),
     )
