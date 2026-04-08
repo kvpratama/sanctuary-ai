@@ -4,9 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langsmith.evaluation import EvaluationResult
+from pydantic import SecretStr
 
 from src.config import JudgeConfig
-from src.eval.jury import _build_judge_grader, minority_veto
+from src.eval.jury import _build_judge_grader, _judge_grader_cache, minority_veto
 
 
 def _make_judges() -> list[JudgeConfig]:
@@ -98,8 +99,7 @@ async def test_minority_veto_all_fail() -> None:
 async def test_build_judge_grader_resolves_api_key() -> None:
     """_build_judge_grader reads the API key from the Settings field named in api_key_field."""
     mock_settings = MagicMock()
-    mock_settings.openai_api_key = MagicMock()
-    mock_settings.openai_api_key.get_secret_value.return_value = "sk-jury-key"
+    mock_settings.openai_api_key = SecretStr("sk-jury-key")
 
     mock_llm = MagicMock()
     mock_llm.with_structured_output.return_value = MagicMock()
@@ -109,6 +109,8 @@ async def test_build_judge_grader_resolves_api_key() -> None:
     judge = JudgeConfig(
         model="gpt-4o", provider="openai", api_key_field="openai_api_key"
     )
+
+    _judge_grader_cache.clear()
 
     with (
         patch("src.eval.jury.get_settings", return_value=mock_settings),

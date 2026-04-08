@@ -10,15 +10,23 @@ from typing import Any
 from langchain.chat_models import init_chat_model
 from langchain_core.runnables import Runnable
 from langsmith.evaluation import EvaluationResult
+from pydantic import SecretStr
 
 from src.config import JudgeConfig, get_settings
 from src.prompts.manager import pull_eval_prompt
+
+_judge_grader_cache: dict[str, Runnable] = {}
+_judge_grader_lock: asyncio.Lock = asyncio.Lock()
 
 
 async def _build_judge_grader(
     judge: JudgeConfig, prompt_name: str, schema: type
 ) -> Runnable:
-    """Build a grader chain for a specific judge configuration.
+    """Return a cached grader chain for a specific judge configuration.
+
+    Builds the chain on first call for each ``(model, provider, prompt_name)``
+    combination and caches it. An ``asyncio.Lock`` ensures only one coroutine
+    performs initialization.
 
     Args:
         judge: The judge configuration specifying model, provider, and key.
@@ -27,22 +35,46 @@ async def _build_judge_grader(
 
     Returns:
         A runnable chain that produces dicts matching ``schema``.
+
+    Raises:
+        ValueError: If ``api_key_field`` does not exist on Settings or is not
+            a ``SecretStr``.
     """
-    settings = get_settings()
+    cache_key = f"{judge.model}:{judge.provider}:{prompt_name}"
+    if cache_key in _judge_grader_cache:
+        return _judge_grader_cache[cache_key]
 
-    api_key_secret = getattr(settings, judge.api_key_field, None)
-    api_key = api_key_secret.get_secret_value() if api_key_secret else None
+    async with _judge_grader_lock:
+        if cache_key in _judge_grader_cache:
+            return _judge_grader_cache[cache_key]
 
-    llm = init_chat_model(
-        model=judge.model,
-        model_provider=judge.provider,
-        api_key=api_key,
-        base_url=judge.base_url or None,
-        temperature=0,
-    )
+        settings = get_settings()
 
-    prompt = await pull_eval_prompt(prompt_name)
-    return prompt | llm.with_structured_output(schema)
+        api_key_secret = getattr(settings, judge.api_key_field, None)
+        if api_key_secret is None:
+            raise ValueError(
+                f"EVAL_JURY_JUDGES: api_key_field '{judge.api_key_field}' "
+                f"does not exist on Settings."
+            )
+        if not isinstance(api_key_secret, SecretStr):
+            raise ValueError(
+                f"EVAL_JURY_JUDGES: api_key_field '{judge.api_key_field}' "
+                f"is not a SecretStr field (got {type(api_key_secret).__name__}). "
+                f"It must reference a SecretStr field on Settings."
+            )
+        api_key = api_key_secret.get_secret_value()
+
+        llm = init_chat_model(
+            model=judge.model,
+            model_provider=judge.provider,
+            api_key=api_key,
+            base_url=judge.base_url or None,
+            temperature=0,
+        )
+
+        prompt = await pull_eval_prompt(prompt_name)
+        _judge_grader_cache[cache_key] = prompt | llm.with_structured_output(schema)
+        return _judge_grader_cache[cache_key]
 
 
 async def minority_veto(

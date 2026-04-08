@@ -63,6 +63,46 @@ async def _get_grader(name: str, prompt_name: str, schema: type) -> Runnable:
         return _grader_cache[name]
 
 
+async def _execute_grade(
+    key: str,
+    prompt_name: str,
+    schema: type,
+    invoke_kwargs: dict[str, Any],
+    score_field: str,
+) -> EvaluationResult:
+    """Grade using jury-of-judges or a single grader, depending on config.
+
+    Args:
+        key: Evaluator key name (e.g. ``"correctness"``).
+        prompt_name: LangSmith prompt hub name for the grader prompt.
+        schema: TypedDict class for structured output.
+        invoke_kwargs: Arguments to pass to the grader chain.
+        score_field: Key in the grader output dict that holds the boolean grade.
+
+    Returns:
+        An ``EvaluationResult`` with score and explanation.
+    """
+    settings = get_settings()
+    if settings.eval_jury_judges:
+        return await minority_veto(
+            key=key,
+            prompt_name=prompt_name,
+            schema=schema,
+            invoke_kwargs=invoke_kwargs,
+            score_field=score_field,
+            judges=settings.eval_jury_judges,
+        )
+
+    grader = await _get_grader(key, prompt_name, schema)
+    grade: dict[str, Any] = await grader.ainvoke(invoke_kwargs)
+
+    return EvaluationResult(
+        key=key,
+        score=1 if grade[score_field] else 0,
+        comment=grade["explanation"],
+    )
+
+
 def _get_outputs(
     obj: Run | Example | dict[str, Any] | None, attr: str
 ) -> dict[str, Any]:
@@ -180,32 +220,16 @@ async def correctness(run: Run, example: Example | None) -> EvaluationResult:
             comment=f"Missing required keys: {', '.join(missing)}",
         )
 
-    invoke_kwargs = {
-        "question": example_inputs["question"],
-        "expected": example_outputs["answer"],
-        "actual": run_outputs["answer"],
-    }
-
-    settings = get_settings()
-    if settings.eval_jury_judges:
-        return await minority_veto(
-            key="correctness",
-            prompt_name="sanctuary-eval-correctness",
-            schema=CorrectnessGrade,
-            invoke_kwargs=invoke_kwargs,
-            score_field="correct",
-            judges=settings.eval_jury_judges,
-        )
-
-    grader = await _get_grader(
-        "correctness", "sanctuary-eval-correctness", CorrectnessGrade
-    )
-    grade: CorrectnessGrade = await grader.ainvoke(invoke_kwargs)
-
-    return EvaluationResult(
+    return await _execute_grade(
         key="correctness",
-        score=1 if grade["correct"] else 0,
-        comment=grade["explanation"],
+        prompt_name="sanctuary-eval-correctness",
+        schema=CorrectnessGrade,
+        invoke_kwargs={
+            "question": example_inputs["question"],
+            "expected": example_outputs["answer"],
+            "actual": run_outputs["answer"],
+        },
+        score_field="correct",
     )
 
 
@@ -253,29 +277,15 @@ async def relevance(run: Run, example: Example | None) -> EvaluationResult:
             comment=f"Missing required keys: {', '.join(missing)}",
         )
 
-    invoke_kwargs = {
-        "question": example_inputs["question"],
-        "answer": run_outputs["answer"],
-    }
-
-    settings = get_settings()
-    if settings.eval_jury_judges:
-        return await minority_veto(
-            key="relevance",
-            prompt_name="sanctuary-eval-relevance",
-            schema=RelevanceGrade,
-            invoke_kwargs=invoke_kwargs,
-            score_field="relevant",
-            judges=settings.eval_jury_judges,
-        )
-
-    grader = await _get_grader("relevance", "sanctuary-eval-relevance", RelevanceGrade)
-    grade: RelevanceGrade = await grader.ainvoke(invoke_kwargs)
-
-    return EvaluationResult(
+    return await _execute_grade(
         key="relevance",
-        score=1 if grade["relevant"] else 0,
-        comment=grade["explanation"],
+        prompt_name="sanctuary-eval-relevance",
+        schema=RelevanceGrade,
+        invoke_kwargs={
+            "question": example_inputs["question"],
+            "answer": run_outputs["answer"],
+        },
+        score_field="relevant",
     )
 
 
@@ -324,31 +334,15 @@ async def groundedness(run: Run, example: Example | None) -> EvaluationResult:
             comment=f"Missing required keys: {', '.join(missing)}",
         )
 
-    invoke_kwargs = {
-        "answer": run_outputs["answer"],
-        "documents": _format_docs(run_outputs["documents"]),
-    }
-
-    settings = get_settings()
-    if settings.eval_jury_judges:
-        return await minority_veto(
-            key="groundedness",
-            prompt_name="sanctuary-eval-groundedness",
-            schema=GroundedGrade,
-            invoke_kwargs=invoke_kwargs,
-            score_field="grounded",
-            judges=settings.eval_jury_judges,
-        )
-
-    grader = await _get_grader(
-        "groundedness", "sanctuary-eval-groundedness", GroundedGrade
-    )
-    grade: GroundedGrade = await grader.ainvoke(invoke_kwargs)
-
-    return EvaluationResult(
+    return await _execute_grade(
         key="groundedness",
-        score=1 if grade["grounded"] else 0,
-        comment=grade["explanation"],
+        prompt_name="sanctuary-eval-groundedness",
+        schema=GroundedGrade,
+        invoke_kwargs={
+            "answer": run_outputs["answer"],
+            "documents": _format_docs(run_outputs["documents"]),
+        },
+        score_field="grounded",
     )
 
 
@@ -399,31 +393,13 @@ async def retrieval_relevance(run: Run, example: Example | None) -> EvaluationRe
             comment=f"Missing required keys: {', '.join(missing)}",
         )
 
-    invoke_kwargs = {
-        "question": example_inputs["question"],
-        "documents": _format_docs(run_outputs["documents"]),
-    }
-
-    settings = get_settings()
-    if settings.eval_jury_judges:
-        return await minority_veto(
-            key="retrieval_relevance",
-            prompt_name="sanctuary-eval-retrieval-relevance",
-            schema=RetrievalRelevanceGrade,
-            invoke_kwargs=invoke_kwargs,
-            score_field="relevant",
-            judges=settings.eval_jury_judges,
-        )
-
-    grader = await _get_grader(
-        "retrieval_relevance",
-        "sanctuary-eval-retrieval-relevance",
-        RetrievalRelevanceGrade,
-    )
-    grade: RetrievalRelevanceGrade = await grader.ainvoke(invoke_kwargs)
-
-    return EvaluationResult(
+    return await _execute_grade(
         key="retrieval_relevance",
-        score=1 if grade["relevant"] else 0,
-        comment=grade["explanation"],
+        prompt_name="sanctuary-eval-retrieval-relevance",
+        schema=RetrievalRelevanceGrade,
+        invoke_kwargs={
+            "question": example_inputs["question"],
+            "documents": _format_docs(run_outputs["documents"]),
+        },
+        score_field="relevant",
     )
