@@ -5,7 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langsmith.schemas import Dataset, Example
 
-from src.eval.dataset import DATASET_NAME, ensure_dataset, examples, get_content_hash
+from src.eval.dataset import DATASET_NAME, ensure_dataset, get_content_hash
+from src.eval.examples import examples
 
 
 def _make_dataset() -> Dataset:
