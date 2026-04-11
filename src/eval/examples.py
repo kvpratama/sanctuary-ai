@@ -82,14 +82,14 @@ To fix these failures and increase future reliability, the most common industry 
             "user_id": "f9937aab-6c97-4c3e-a6f8-38f4a1676200",
         },
         "outputs": {
-            "answer": """**ML systems design** is best described as a **system approach to MLOps**, focusing on the holistic coordination of all components and stakeholders to meet specific objectives,. 
+            "answer": """**ML systems design** is best described as a **system approach to MLOps**, focusing on the holistic coordination of all components and stakeholders to meet specific objectives. 
 
 The relationship between the two can be understood through their respective focuses:
 
 *   **MLOps** is defined as a set of **tools and best practices** used to bring machine learning into production. This involves the "operationalization" of ML, which includes **deploying, monitoring, and maintaining** models in a live environment.
-*   **Machine Learning Systems Design** provides the **principled, end-to-end view** necessary to navigate MLOps. It ensures that every part of the system—including **business requirements, the data stack, infrastructure, and deployment logic**—works together as a unified whole rather than in isolation,.
+*   **Machine Learning Systems Design** provides the **principled, end-to-end view** necessary to navigate MLOps. It ensures that every part of the system—including **business requirements, the data stack, infrastructure, and deployment logic**—works together as a unified whole rather than in isolation.
 
-While MLOps provides the technical "how" for productionizing models, ML systems design acts as the **map and compass**, considering the system holistically to satisfy requirements like **reliability, scalability, maintainability, and adaptability**,,. This holistic approach is necessary because changes in one component, such as an ML algorithm, will likely affect other components like the data pipeline or business logic."""
+While MLOps provides the technical "how" for productionizing models, ML systems design acts as the **map and compass**, considering the system holistically to satisfy requirements like **reliability, scalability, maintainability, and adaptability**. This holistic approach is necessary because changes in one component, such as an ML algorithm, will likely affect other components like the data pipeline or business logic."""
         },
         "metadata": {
             "external_id": "id_5",
