@@ -116,8 +116,7 @@ MULTI_QUERY_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
             "system",
             "You are a search query generator. Given a user's question, generate {n} "
             "different versions of the question that capture different angles or phrasings. "
-            "Each version should help retrieve relevant documents from a vector store. "
-            "Return ONLY the queries, one per line, numbered 1. 2. 3. etc.",
+            "Each version should help retrieve relevant documents from a vector store.",
         ),
         (
             "human",

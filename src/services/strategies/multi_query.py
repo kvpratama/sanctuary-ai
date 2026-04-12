@@ -5,12 +5,13 @@ deduplicates, and generates an answer from the merged context.
 """
 
 import logging
-import re
 from collections.abc import AsyncGenerator
+from typing import cast
 
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
 from langsmith import traceable
+from pydantic import BaseModel, Field
 
 from src.config import get_settings
 from src.prompts.manager import pull_eval_prompt
@@ -19,6 +20,14 @@ from src.services.retrieval import retrieve_chunks, stream_answer_with_citations
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
+
+
+class QueryVariants(BaseModel):
+    """A list of query variants generated from the original question."""
+
+    variants: list[str] = Field(
+        description="List of rephrased query variants for retrieval."
+    )
 
 
 @traceable(metadata={"rag_strategy": "multi_query"})
@@ -43,33 +52,22 @@ async def generate_query_variants(query: str, *, n: int = 3) -> list[str]:
             temperature=0.7,
         )
 
+        structured_llm = llm.with_structured_output(QueryVariants)
         prompt = await pull_eval_prompt("sanctuary-multi-query")
-        chain = prompt | llm
-        response = await chain.ainvoke({"query": query, "n": n})
+        chain = prompt | structured_llm
+        result = await chain.ainvoke({"query": query, "n": n})
+        response = cast(QueryVariants, result)
 
-        raw = response.content if hasattr(response, "content") else ""
-        content = raw.strip() if isinstance(raw, str) else ""
-        if not content:
+        if not response.variants:
             logger.warning(
                 "Multi-query generation returned empty, falling back to original"
             )
             return [query]
 
-        # Parse numbered lines: "1. query text" or "1) query text" or just lines
-        variants = []
-        for line in content.split("\n"):
-            cleaned = re.sub(r"^\d+[\.\)]\s*", "", line.strip())
-            if cleaned:
-                variants.append(cleaned)
-
-        if not variants:
-            logger.warning(
-                "Multi-query parsing produced no variants, falling back to original"
-            )
-            return [query]
-
-        logger.info("Generated %d query variants from: '%s'", len(variants), query)
-        return variants
+        logger.info(
+            "Generated %d query variants from: '%s'", len(response.variants), query
+        )
+        return response.variants
     except Exception:
         logger.warning("Multi-query generation failed, falling back to original query")
         return [query]

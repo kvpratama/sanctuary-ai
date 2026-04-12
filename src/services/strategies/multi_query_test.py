@@ -14,6 +14,7 @@ from src.schemas.chat import (
     TokenEvent,
 )
 from src.services.strategies.multi_query import (
+    QueryVariants,
     deduplicate_chunks,
     execute,
     generate_query_variants,
@@ -22,22 +23,29 @@ from src.services.strategies.multi_query import (
 
 @pytest.mark.asyncio
 async def test_generate_query_variants_returns_parsed_queries():
-    """generate_query_variants parses numbered LLM output into a list of queries."""
+    """generate_query_variants returns parsed queries via structured output."""
     mock_settings = MagicMock()
     mock_settings.llm_model = "gpt-4o-mini"
     mock_settings.llm_provider = "openai"
     mock_settings.openai_api_key = SecretStr("fake-key")
     mock_settings.llm_provider_base_url = "https://api.openai.com/v1"
 
-    mock_response = MagicMock()
-    mock_response.content = (
-        "1. How to detect data distribution shifts in production ML systems\n"
-        "2. Methods for handling covariate shift in deployed models\n"
-        "3. Monitoring and adapting to data drift in live ML pipelines"
+    mock_response = QueryVariants(
+        variants=[
+            "How to detect data distribution shifts in production ML systems",
+            "Methods for handling covariate shift in deployed models",
+            "Monitoring and adapting to data drift in live ML pipelines",
+        ]
     )
 
     mock_chain = MagicMock()
     mock_chain.ainvoke = AsyncMock(return_value=mock_response)
+
+    mock_structured_llm = MagicMock()
+    mock_structured_llm.__or__ = MagicMock()
+
+    mock_llm = MagicMock()
+    mock_llm.with_structured_output = MagicMock(return_value=mock_structured_llm)
 
     mock_prompt = MagicMock()
     mock_prompt.__or__ = MagicMock(return_value=mock_chain)
@@ -47,7 +55,10 @@ async def test_generate_query_variants_returns_parsed_queries():
             "src.services.strategies.multi_query.get_settings",
             return_value=mock_settings,
         ),
-        patch("src.services.strategies.multi_query.init_chat_model"),
+        patch(
+            "src.services.strategies.multi_query.init_chat_model",
+            return_value=mock_llm,
+        ),
         patch(
             "src.services.strategies.multi_query.pull_eval_prompt",
             new_callable=AsyncMock,
@@ -69,18 +80,23 @@ async def test_generate_query_variants_returns_parsed_queries():
 
 @pytest.mark.asyncio
 async def test_generate_query_variants_falls_back_to_original():
-    """generate_query_variants returns [original] if LLM returns empty."""
+    """generate_query_variants returns [original] if LLM returns empty variants."""
     mock_settings = MagicMock()
     mock_settings.llm_model = "gpt-4o-mini"
     mock_settings.llm_provider = "openai"
     mock_settings.openai_api_key = SecretStr("fake-key")
     mock_settings.llm_provider_base_url = "https://api.openai.com/v1"
 
-    mock_response = MagicMock()
-    mock_response.content = ""
+    mock_response = QueryVariants(variants=[])
 
     mock_chain = MagicMock()
     mock_chain.ainvoke = AsyncMock(return_value=mock_response)
+
+    mock_structured_llm = MagicMock()
+    mock_structured_llm.__or__ = MagicMock()
+
+    mock_llm = MagicMock()
+    mock_llm.with_structured_output = MagicMock(return_value=mock_structured_llm)
 
     mock_prompt = MagicMock()
     mock_prompt.__or__ = MagicMock(return_value=mock_chain)
@@ -90,7 +106,10 @@ async def test_generate_query_variants_falls_back_to_original():
             "src.services.strategies.multi_query.get_settings",
             return_value=mock_settings,
         ),
-        patch("src.services.strategies.multi_query.init_chat_model"),
+        patch(
+            "src.services.strategies.multi_query.init_chat_model",
+            return_value=mock_llm,
+        ),
         patch(
             "src.services.strategies.multi_query.pull_eval_prompt",
             new_callable=AsyncMock,
