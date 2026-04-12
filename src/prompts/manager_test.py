@@ -106,6 +106,18 @@ def test_query_rewrite_prompt_has_query_variable() -> None:
     assert "query" in prompt.input_variables
 
 
+def test_multi_query_fallback_prompt_exists() -> None:
+    """A fallback prompt is registered for sanctuary-multi-query."""
+    assert "sanctuary-multi-query" in FALLBACK_PROMPTS
+
+
+def test_multi_query_prompt_has_query_and_n_variables() -> None:
+    """The multi-query prompt template accepts 'query' and 'n' input variables."""
+    prompt = FALLBACK_PROMPTS["sanctuary-multi-query"]
+    assert "query" in prompt.input_variables
+    assert "n" in prompt.input_variables
+
+
 @patch("src.prompts.manager._get_client")
 def test_push_eval_prompts_logs_error_on_failure(
     mock_get_client: MagicMock,
