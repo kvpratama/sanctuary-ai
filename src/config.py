@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     eval_llm_api_key: SecretStr | None = None
     cerebras_api_key: SecretStr | None = None
 
+    # RAG strategy selection for experimentation
+    rag_strategy: str = "naive_rag"
+
     # Jury-of-judges configuration (optional JSON array of judge configs)
     eval_jury_judges: list[JudgeConfig] | None = None
 

@@ -320,15 +320,17 @@ async def test_stream_rag_pipeline_yields_events():
 
     with (
         patch(
-            "src.services.retrieval.retrieve_chunks",
+            "src.services.strategies.naive_rag.retrieve_chunks",
             new_callable=AsyncMock,
             return_value=mock_chunks,
         ) as mock_retrieve,
         patch(
-            "src.services.retrieval.stream_answer_with_citations",
+            "src.services.strategies.naive_rag.stream_answer_with_citations",
             side_effect=fake_stream,
         ),
+        patch("src.services.retrieval.get_settings") as mock_settings,
     ):
+        mock_settings.return_value.rag_strategy = "naive_rag"
         mock_client = AsyncMock()
         results = [
             event
@@ -363,3 +365,40 @@ async def test_stream_rag_pipeline_yields_events():
         k=3,
         client=mock_client,
     )
+
+
+@pytest.mark.asyncio
+async def test_stream_rag_pipeline_dispatches_to_configured_strategy():
+    """stream_rag_pipeline delegates to the strategy from settings.rag_strategy."""
+    fake_events = [
+        ChunksEvent(chunks=[]),
+        TokenEvent(token="dispatched"),
+        CitationsEvent(citations=[]),
+    ]
+
+    async def fake_execute(query, document_id, user_id, k=5, *, client=None):
+        for event in fake_events:
+            yield event
+
+    mock_settings = MagicMock()
+    mock_settings.rag_strategy = "naive_rag"
+
+    with (
+        patch("src.services.retrieval.get_settings", return_value=mock_settings),
+        patch(
+            "src.services.retrieval.get_strategy",
+            return_value=fake_execute,
+        ) as mock_get_strategy,
+    ):
+        results = [
+            event
+            async for event in stream_rag_pipeline(
+                query="test",  # ty: ignore[invalid-argument-type]
+                document_id="doc-1",  # ty: ignore[invalid-argument-type]
+                user_id="user-1",  # ty: ignore[invalid-argument-type]
+            )
+        ]
+
+    mock_get_strategy.assert_called_once_with("naive_rag")
+    assert len(results) == 3
+    assert results[1] == TokenEvent(token="dispatched")
