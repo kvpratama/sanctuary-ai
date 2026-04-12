@@ -94,12 +94,29 @@ RAG_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
     ]
 )
 
+QUERY_REWRITE_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a search query optimizer. Given a user's question, rewrite it "
+            "into a concise, keyword-rich search query optimized for semantic similarity "
+            "search against a document embedding index. Focus on the core concepts and "
+            "expand abbreviations. Return ONLY the rewritten query, nothing else.",
+        ),
+        (
+            "human",
+            "Original question: {query}",
+        ),
+    ]
+)
+
 FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-eval-correctness": CORRECTNESS_PROMPT_HARDCODED,
     "sanctuary-eval-relevance": RELEVANCE_PROMPT_HARDCODED,
     "sanctuary-eval-groundedness": GROUNDEDNESS_PROMPT_HARDCODED,
     "sanctuary-eval-retrieval-relevance": RETRIEVAL_RELEVANCE_PROMPT_HARDCODED,
     "sanctuary-rag-prompt": RAG_PROMPT_HARDCODED,
+    "sanctuary-query-rewrite": QUERY_REWRITE_PROMPT_HARDCODED,
 }
 
 

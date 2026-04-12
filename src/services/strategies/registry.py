@@ -24,9 +24,11 @@ def get_strategy(name: str) -> StrategyFn:
         ValueError: If the strategy name is not registered.
     """
     from src.services.strategies.naive_rag import execute as naive_rag_execute
+    from src.services.strategies.query_rewrite import execute as query_rewrite_execute
 
     registry: dict[str, StrategyFn] = {
         "naive_rag": naive_rag_execute,
+        "query_rewrite": query_rewrite_execute,
     }
 
     if name not in registry:

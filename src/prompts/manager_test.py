@@ -95,6 +95,17 @@ def test_push_eval_prompts_pushes_new(mock_get_client: MagicMock) -> None:
         mock_client.push_prompt.assert_any_call(name, object=prompt)
 
 
+def test_query_rewrite_fallback_prompt_exists() -> None:
+    """A fallback prompt is registered for sanctuary-query-rewrite."""
+    assert "sanctuary-query-rewrite" in FALLBACK_PROMPTS
+
+
+def test_query_rewrite_prompt_has_query_variable() -> None:
+    """The query rewrite prompt template accepts a 'query' input variable."""
+    prompt = FALLBACK_PROMPTS["sanctuary-query-rewrite"]
+    assert "query" in prompt.input_variables
+
+
 @patch("src.prompts.manager._get_client")
 def test_push_eval_prompts_logs_error_on_failure(
     mock_get_client: MagicMock,
