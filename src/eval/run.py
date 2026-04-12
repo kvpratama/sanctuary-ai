@@ -44,7 +44,7 @@ async def main() -> None:
         target,
         data=dataset_name,
         evaluators=[correctness, relevance, groundedness, retrieval_relevance],
-        experiment_prefix="sanctuary",
+        experiment_prefix=f"sanctuary_{settings.rag_strategy}",
         max_concurrency=1,
     )
 
