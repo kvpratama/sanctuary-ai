@@ -1,5 +1,6 @@
 """Unit tests for the query rewrite RAG strategy."""
 
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -97,6 +98,31 @@ async def test_rewrite_query_falls_back_to_original_on_empty_response() -> None:
 
 
 @pytest.mark.asyncio
+async def test_rewrite_query_falls_back_to_original_on_exception() -> None:
+    """rewrite_query returns original query when pull_eval_prompt raises."""
+    with (
+        patch(
+            "src.services.strategies.query_rewrite.get_settings",
+            return_value=MagicMock(
+                llm_model="gpt-4o-mini",
+                llm_provider="openai",
+                openai_api_key=SecretStr("fake-key"),
+                llm_provider_base_url="https://api.openai.com/v1",
+            ),
+        ),
+        patch("src.services.strategies.query_rewrite.init_chat_model"),
+        patch(
+            "src.services.strategies.query_rewrite.pull_eval_prompt",
+            new_callable=AsyncMock,
+            side_effect=ValueError("Prompt pull failed and no fallback exists."),
+        ),
+    ):
+        result = await rewrite_query("original question")  # ty: ignore[invalid-argument-type]
+
+    assert result == "original question"
+
+
+@pytest.mark.asyncio
 async def test_execute_rewrites_query_then_retrieves_and_streams() -> None:
     """execute rewrites the query, retrieves with rewritten query, streams answer with original query."""
     mock_chunks = [
@@ -108,7 +134,9 @@ async def test_execute_rewrites_query_then_retrieves_and_streams() -> None:
         CitationsEvent(citations=[Citation(page=3)]),
     ]
 
-    async def fake_stream(query: str, chunks: list[Document]) -> None:  # type: ignore[override]  # ty:ignore[invalid-return-type]
+    async def fake_stream(
+        query: str, chunks: list[Document]
+    ) -> AsyncGenerator[TokenEvent | CitationsEvent, None]:
         for event in fake_events:
             yield event
 

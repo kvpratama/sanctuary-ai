@@ -30,27 +30,38 @@ async def rewrite_query(query: str) -> str:
         The rewritten query string. Falls back to the original if the LLM
         returns an empty response.
     """
-    settings = get_settings()
-    llm = init_chat_model(
-        model=settings.llm_model,
-        model_provider=settings.llm_provider,
-        api_key=settings.openai_api_key.get_secret_value(),
-        base_url=settings.llm_provider_base_url,
-        temperature=0,
-    )
+    try:
+        settings = get_settings()
+        llm = init_chat_model(
+            model=settings.llm_model,
+            model_provider=settings.llm_provider,
+            api_key=settings.openai_api_key.get_secret_value(),
+            base_url=settings.llm_provider_base_url,
+            temperature=0,
+        )
 
-    prompt = await pull_eval_prompt("sanctuary-query-rewrite")
-    chain = prompt | llm
-    response = await chain.ainvoke({"query": query})
+        prompt = await pull_eval_prompt("sanctuary-query-rewrite")
+        chain = prompt | llm
+        response = await chain.ainvoke({"query": query})
 
-    content = response.content if hasattr(response, "content") else ""
-    rewritten = content.strip() if isinstance(content, str) else ""
-    if not rewritten:
-        logger.warning("Query rewrite returned empty, falling back to original query")
+        content = response.content if hasattr(response, "content") else ""
+        rewritten = content.strip() if isinstance(content, str) else ""
+        if not rewritten:
+            logger.warning(
+                "Query rewrite returned empty, falling back to original query"
+            )
+            return query
+
+        logger.info(
+            "Query rewritten, original_len=%d, rewritten_len=%d",
+            len(query),
+            len(rewritten),
+        )
+        logger.debug("Query rewritten: '%.64s' -> '%.64s'", query, rewritten)
+        return rewritten
+    except Exception:
+        logger.warning("Query rewrite failed, falling back to original query")
         return query
-
-    logger.info("Query rewritten: '%s' -> '%s'", query, rewritten)
-    return rewritten
 
 
 @traceable(metadata={"rag_strategy": "query_rewrite"})
@@ -78,14 +89,18 @@ async def execute(
         ChunksEvent with retrieved documents, then TokenEvent and CitationsEvent.
     """
     logger.info(
-        "query_rewrite: rewriting query='%s', document_id=%s, k=%d",
-        query,
+        "query_rewrite: rewriting query document_id=%s, k=%d, query_len=%d",
         document_id,
         k,
+        len(query),
     )
     rewritten = await rewrite_query(query=query)  # ty: ignore[invalid-argument-type]
 
-    logger.info("query_rewrite: retrieving chunks with rewritten query='%s'", rewritten)
+    logger.info(
+        "query_rewrite: retrieving chunks with rewritten query, query_len=%d",
+        len(rewritten),
+    )
+    logger.debug("query_rewrite: rewritten query='%.64s'", rewritten)
     chunks = await retrieve_chunks(
         query=rewritten,  # ty: ignore[invalid-argument-type]
         document_id=document_id,  # ty: ignore[invalid-argument-type]

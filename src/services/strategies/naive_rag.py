@@ -37,11 +37,12 @@ async def execute(
         ChunksEvent with retrieved documents, then TokenEvent and CitationsEvent.
     """
     logger.info(
-        "naive_rag: retrieving chunks for query='%s', document_id=%s, k=%d",
-        query,
+        "naive_rag: retrieving chunks document_id=%s, k=%d, query_len=%d",
         document_id,
         k,
+        len(query),
     )
+    logger.debug("naive_rag: query='%.64s'", query)
     chunks = await retrieve_chunks(
         query=query,  # ty: ignore[invalid-argument-type]
         document_id=document_id,  # ty: ignore[invalid-argument-type]
