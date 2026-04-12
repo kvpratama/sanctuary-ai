@@ -19,6 +19,7 @@ from src.schemas.chat import (
     StreamEvent,
     TokenEvent,
 )
+from src.services.strategies.registry import get_strategy
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
@@ -187,37 +188,36 @@ async def stream_rag_pipeline(
     *,
     client: AsyncClient | None = None,
 ) -> AsyncGenerator[StreamEvent, None]:
-    """Retrieve chunks then stream the LLM answer with citations.
+    """Dispatch to the configured RAG strategy and stream results.
 
-    Eagerly calls ``retrieve_chunks``, then yields ``StreamEvent`` items
-    from ``stream_answer_with_citations``.  This is the single entry point
-    for the full RAG pipeline — used by both the chat router (streaming)
-    and the eval target (drained to collect the final result).
+    Reads ``settings.rag_strategy`` to select the pipeline variant.
+    Each strategy must yield ``ChunksEvent``, then ``TokenEvent``/``CitationsEvent``.
 
     Args:
         query: The user's question.
         document_id: UUID of the document to search within.
         user_id: UUID of the user (for authorization).
         k: Number of chunks to retrieve.
-        client: Optional Supabase client to reuse for requests.
+        client: Optional Supabase client to reuse.
 
     Yields:
         ChunksEvent with retrieved documents, then TokenEvent and CitationsEvent.
     """
-    chunks = await retrieve_chunks(
-        query=query,  # ty: ignore[invalid-argument-type]
-        document_id=document_id,  # ty: ignore[invalid-argument-type]
-        user_id=user_id,  # ty: ignore[invalid-argument-type]
-        k=k,  # ty: ignore[invalid-argument-type]
-        client=client,  # ty: ignore[invalid-argument-type]
-    )
+    settings = get_settings()
+    try:
+        strategy = get_strategy(settings.rag_strategy)
+    except ValueError:
+        logger.warning(
+            "Unknown RAG strategy '%s', falling back to 'naive_rag'",
+            settings.rag_strategy,
+        )
+        strategy = get_strategy("naive_rag")
 
-    yield ChunksEvent(
-        chunks=[
-            RetrievedChunk(page_content=c.page_content, page=c.metadata.get("page"))
-            for c in chunks
-        ]
-    )
-
-    async for event in stream_answer_with_citations(query=query, chunks=chunks):  # ty: ignore
+    async for event in strategy(
+        query=query,
+        document_id=document_id,
+        user_id=user_id,
+        k=k,
+        client=client,
+    ):
         yield event

@@ -51,6 +51,7 @@ class Settings(BaseSettings):
             eval_llm_provider: LLM provider for evaluations (default: openai).
             eval_llm_provider_base_url: Base URL for evaluation LLM provider API.
             eval_llm_api_key: API key for evaluation LLM (optional, falls back to openai_api_key).
+            rag_strategy: RAG pipeline strategy to use (default: naive_rag).
             eval_jury_judges: List of judge configurations for jury-of-judges evaluation (optional).
             langsmith_api_key: LangSmith API key for tracing (optional).
             langsmith_project: LangSmith project name (default: default).
@@ -90,6 +91,9 @@ class Settings(BaseSettings):
     eval_llm_provider_base_url: str = "https://api.openai.com/v1"
     eval_llm_api_key: SecretStr | None = None
     cerebras_api_key: SecretStr | None = None
+
+    # RAG strategy selection for experimentation
+    rag_strategy: str = "naive_rag"
 
     # Jury-of-judges configuration (optional JSON array of judge configs)
     eval_jury_judges: list[JudgeConfig] | None = None

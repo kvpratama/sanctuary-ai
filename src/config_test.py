@@ -161,3 +161,35 @@ def test_settings_eval_jury_judges_defaults_to_none(
 
     settings = Settings(_env_file=None)  # ty:ignore[missing-argument,unknown-argument]
     assert settings.eval_jury_judges is None
+
+
+def test_settings_rag_strategy_defaults_to_naive_rag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Settings.rag_strategy defaults to 'naive_rag'."""
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "test-key")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "test-anon-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini")
+    monkeypatch.setenv("BOOKIFIED_BLOB_READ_WRITE_TOKEN", "test-blob")
+    monkeypatch.delenv("RAG_STRATEGY", raising=False)
+
+    settings = Settings(_env_file=None)  # ty:ignore[missing-argument,unknown-argument]
+    assert settings.rag_strategy == "naive_rag"
+
+
+def test_settings_rag_strategy_reads_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Settings.rag_strategy reads from RAG_STRATEGY env var."""
+    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "test-key")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "test-anon-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini")
+    monkeypatch.setenv("BOOKIFIED_BLOB_READ_WRITE_TOKEN", "test-blob")
+    monkeypatch.setenv("RAG_STRATEGY", "query_rewrite")
+
+    settings = Settings(_env_file=None)  # ty:ignore[missing-argument,unknown-argument]
+    assert settings.rag_strategy == "query_rewrite"
