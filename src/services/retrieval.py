@@ -204,7 +204,14 @@ async def stream_rag_pipeline(
         ChunksEvent with retrieved documents, then TokenEvent and CitationsEvent.
     """
     settings = get_settings()
-    strategy = get_strategy(settings.rag_strategy)
+    try:
+        strategy = get_strategy(settings.rag_strategy)
+    except ValueError:
+        logger.warning(
+            "Unknown RAG strategy '%s', falling back to 'naive_rag'",
+            settings.rag_strategy,
+        )
+        strategy = get_strategy("naive_rag")
 
     async for event in strategy(
         query=query,

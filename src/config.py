@@ -51,6 +51,7 @@ class Settings(BaseSettings):
             eval_llm_provider: LLM provider for evaluations (default: openai).
             eval_llm_provider_base_url: Base URL for evaluation LLM provider API.
             eval_llm_api_key: API key for evaluation LLM (optional, falls back to openai_api_key).
+            rag_strategy: RAG pipeline strategy to use (default: naive_rag).
             eval_jury_judges: List of judge configurations for jury-of-judges evaluation (optional).
             langsmith_api_key: LangSmith API key for tracing (optional).
             langsmith_project: LangSmith project name (default: default).

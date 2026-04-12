@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,6 +10,7 @@ from src.schemas.chat import (
     Citation,
     CitationsEvent,
     RetrievedChunk,
+    StreamEvent,
     TokenEvent,
 )
 from src.services.retrieval import (
@@ -368,15 +370,22 @@ async def test_stream_rag_pipeline_yields_events():
 
 
 @pytest.mark.asyncio
-async def test_stream_rag_pipeline_dispatches_to_configured_strategy():
+async def test_stream_rag_pipeline_dispatches_to_configured_strategy() -> None:
     """stream_rag_pipeline delegates to the strategy from settings.rag_strategy."""
-    fake_events = [
+    fake_events: list[StreamEvent] = [
         ChunksEvent(chunks=[]),
         TokenEvent(token="dispatched"),
         CitationsEvent(citations=[]),
     ]
 
-    async def fake_execute(query, document_id, user_id, k=5, *, client=None):
+    async def fake_execute(
+        query: str,
+        document_id: str,
+        user_id: str,
+        k: int = 5,
+        *,
+        client: object | None = None,
+    ) -> AsyncGenerator[StreamEvent, None]:
         for event in fake_events:
             yield event
 
