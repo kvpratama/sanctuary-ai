@@ -125,6 +125,20 @@ MULTI_QUERY_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
     ]
 )
 
+RETRIEVAL_GRADING_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a relevance grader. Given a user question and a retrieved document, "
+            "determine if the document contains information relevant to answering the question.",
+        ),
+        (
+            "human",
+            "Question: {query}\n\nDocument:\n{document}",
+        ),
+    ]
+)
+
 FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-eval-correctness": CORRECTNESS_PROMPT_HARDCODED,
     "sanctuary-eval-relevance": RELEVANCE_PROMPT_HARDCODED,
@@ -133,6 +147,7 @@ FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-rag-prompt": RAG_PROMPT_HARDCODED,
     "sanctuary-query-rewrite": QUERY_REWRITE_PROMPT_HARDCODED,
     "sanctuary-multi-query": MULTI_QUERY_PROMPT_HARDCODED,
+    "sanctuary-retrieval-grading": RETRIEVAL_GRADING_PROMPT_HARDCODED,
 }
 
 

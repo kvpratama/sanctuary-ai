@@ -26,11 +26,15 @@ def get_strategy(name: str) -> StrategyFn:
     from src.services.strategies.multi_query import execute as multi_query_execute
     from src.services.strategies.naive_rag import execute as naive_rag_execute
     from src.services.strategies.query_rewrite import execute as query_rewrite_execute
+    from src.services.strategies.self_correcting import (
+        execute as self_correcting_execute,
+    )
 
     registry: dict[str, StrategyFn] = {
         "naive_rag": naive_rag_execute,
         "query_rewrite": query_rewrite_execute,
         "multi_query": multi_query_execute,
+        "self_correcting": self_correcting_execute,
     }
 
     if name not in registry:
