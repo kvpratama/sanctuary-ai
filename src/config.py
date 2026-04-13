@@ -44,6 +44,7 @@ class Settings(BaseSettings):
             llm_model: Language model to use (default: gpt-4o-mini).
             llm_provider: LLM provider name (default: openai).
             llm_provider_base_url: Base URL for LLM provider API.
+            grading_llm_model: Language model to use for internal relevance grading (default: gpt-4o-mini).
             embedding_model: Embedding model to use (default: gemini-embedding-001).
             min_similarity: Minimum similarity threshold for retrieval.
             cors_origins: List of allowed CORS origins.
@@ -79,6 +80,7 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_provider: str = "openai"
     llm_provider_base_url: str = "https://api.openai.com/v1"
+    grading_llm_model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
 
     min_similarity: float = 0.6
