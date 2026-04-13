@@ -1,7 +1,10 @@
+from collections.abc import AsyncIterator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.documents import Document
+from langchain_core.messages import AIMessageChunk
 from pydantic import SecretStr
 
 from src.schemas.chat import Citation
@@ -13,7 +16,7 @@ from src.services.strategies.core import (
 
 
 @pytest.mark.asyncio
-async def test_retrieve_chunks_calls_rpc_with_filter():
+async def test_retrieve_chunks_calls_rpc_with_filter() -> None:
     """Test that retrieve_chunks calls RPC with correct filter."""
     mock_settings = MagicMock()
     mock_settings.embedding_model = "gemini-embedding-001"
@@ -73,7 +76,7 @@ async def test_retrieve_chunks_calls_rpc_with_filter():
 
 
 @pytest.mark.asyncio
-async def test_retrieve_chunks_uses_provided_client():
+async def test_retrieve_chunks_uses_provided_client() -> None:
     """retrieve_chunks uses the explicitly provided client instead of the default."""
     mock_settings = MagicMock()
     mock_settings.embedding_model = "gemini-embedding-001"
@@ -113,7 +116,7 @@ async def test_retrieve_chunks_uses_provided_client():
         mock_get_client.assert_not_called()
 
 
-def test_extract_citations_returns_only_cited_pages():
+def test_extract_citations_returns_only_cited_pages() -> None:
     """Test citation extraction returns only pages cited in the answer."""
     chunks = [
         Document(page_content="content a", metadata={"page": 15}),
@@ -128,7 +131,7 @@ def test_extract_citations_returns_only_cited_pages():
     assert citations[1].page == 15
 
 
-def test_extract_citations_ignores_pages_not_in_chunks():
+def test_extract_citations_ignores_pages_not_in_chunks() -> None:
     """Test that cited pages not present in chunks are excluded."""
     chunks = [
         Document(page_content="content a", metadata={"page": 5}),
@@ -140,7 +143,7 @@ def test_extract_citations_ignores_pages_not_in_chunks():
     assert citations[0].page == 5
 
 
-def test_extract_citations_no_markers_returns_empty():
+def test_extract_citations_no_markers_returns_empty() -> None:
     """Test that an answer with no page markers yields no citations."""
     chunks = [
         Document(page_content="content a", metadata={"page": 5}),
@@ -149,22 +152,21 @@ def test_extract_citations_no_markers_returns_empty():
     assert citations == []
 
 
-def test_extract_citations_empty():
+def test_extract_citations_empty() -> None:
     """Test citation extraction with no chunks."""
     citations = extract_citations("Some answer [p. 1].", [])
     assert citations == []
 
 
 @pytest.mark.asyncio
-async def test_stream_answer_with_citations_yields_tokens_then_citations():
+async def test_stream_answer_with_citations_yields_tokens_then_citations() -> None:
     """Test streaming yields token strings then a citations tuple."""
-    from langchain_core.messages import AIMessageChunk
-
     chunks_input = [
         Document(page_content="content a", metadata={"page": 12}),
     ]
 
-    async def fake_astream(prompt):
+    async def fake_astream(prompt: Any) -> AsyncIterator[AIMessageChunk]:
+        """Yield fake LLM message chunks for testing."""
         for text in ["The author ", "argues that [p. 12]."]:
             yield AIMessageChunk(content=text)
 
@@ -215,15 +217,16 @@ async def test_stream_answer_with_citations_yields_tokens_then_citations():
 
 
 @pytest.mark.asyncio
-async def test_stream_answer_empty_llm_response_yields_fallback_token():
+async def test_stream_answer_empty_llm_response_yields_fallback_token() -> None:
     """Test that an empty LLM stream emits the fallback token then CitationsEvent."""
     chunks_input = [
         Document(page_content="content a", metadata={"page": 3}),
     ]
 
-    async def empty_astream(prompt):
+    async def empty_astream(prompt: Any) -> AsyncIterator[AIMessageChunk]:
+        """Yield nothing, simulating an empty LLM response."""
         return
-        yield  # noqa: RET504 — makes this an async generator
+        yield  # noqa: RET504 — makes this an async generator  # ty: ignore[invalid-yield]
 
     mock_settings = MagicMock()
     mock_settings.llm_model = "gpt-4o-mini"
@@ -269,7 +272,7 @@ async def test_stream_answer_empty_llm_response_yields_fallback_token():
 
 
 @pytest.mark.asyncio
-async def test_stream_answer_with_citations_no_chunks():
+async def test_stream_answer_with_citations_no_chunks() -> None:
     """Test streaming with no chunks yields canned response and empty citations."""
     results = []
     async for item in stream_answer_with_citations(

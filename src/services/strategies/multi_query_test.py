@@ -1,5 +1,7 @@
 """Unit tests for the multi-query RAG strategy."""
 
+from collections.abc import AsyncIterator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,6 +13,7 @@ from src.schemas.chat import (
     Citation,
     CitationsEvent,
     RetrievedChunk,
+    StreamEvent,
     TokenEvent,
 )
 from src.services.strategies.multi_query import (
@@ -22,7 +25,7 @@ from src.services.strategies.multi_query import (
 
 
 @pytest.mark.asyncio
-async def test_generate_query_variants_returns_parsed_queries():
+async def test_generate_query_variants_returns_parsed_queries() -> None:
     """generate_query_variants returns parsed queries via structured output."""
     mock_settings = MagicMock()
     mock_settings.llm_model = "gpt-4o-mini"
@@ -79,7 +82,7 @@ async def test_generate_query_variants_returns_parsed_queries():
 
 
 @pytest.mark.asyncio
-async def test_generate_query_variants_falls_back_to_original():
+async def test_generate_query_variants_falls_back_to_original() -> None:
     """generate_query_variants returns [original] if LLM returns empty variants."""
     mock_settings = MagicMock()
     mock_settings.llm_model = "gpt-4o-mini"
@@ -122,7 +125,7 @@ async def test_generate_query_variants_falls_back_to_original():
 
 
 @pytest.mark.asyncio
-async def test_generate_query_variants_falls_back_on_exception():
+async def test_generate_query_variants_falls_back_on_exception() -> None:
     """generate_query_variants returns [original] when pull_eval_prompt raises."""
     with (
         patch(
@@ -146,7 +149,7 @@ async def test_generate_query_variants_falls_back_on_exception():
     assert result == ["original question"]
 
 
-def test_deduplicate_chunks_removes_duplicates():
+def test_deduplicate_chunks_removes_duplicates() -> None:
     """deduplicate_chunks removes documents with identical page_content."""
     chunks = [
         Document(page_content="content A", metadata={"page": 1}),
@@ -163,7 +166,7 @@ def test_deduplicate_chunks_removes_duplicates():
     assert contents == ["content A", "content B", "content C"]
 
 
-def test_deduplicate_chunks_preserves_order():
+def test_deduplicate_chunks_preserves_order() -> None:
     """deduplicate_chunks preserves first-seen order."""
     chunks = [
         Document(page_content="second", metadata={"page": 2}),
@@ -178,13 +181,13 @@ def test_deduplicate_chunks_preserves_order():
     assert result[1].page_content == "first"
 
 
-def test_deduplicate_chunks_empty_input():
+def test_deduplicate_chunks_empty_input() -> None:
     """deduplicate_chunks returns empty list for empty input."""
     assert deduplicate_chunks([]) == []
 
 
 @pytest.mark.asyncio
-async def test_execute_generates_variants_retrieves_deduplicates_and_streams():
+async def test_execute_generates_variants_retrieves_deduplicates_and_streams() -> None:
     """execute generates variants, retrieves for each, deduplicates, and streams."""
     chunks_variant_1 = [
         Document(page_content="content A", metadata={"page": 1}),
@@ -197,7 +200,15 @@ async def test_execute_generates_variants_retrieves_deduplicates_and_streams():
 
     call_count = 0
 
-    async def mock_retrieve(query, document_id, user_id, k=5, *, client=None):
+    async def mock_retrieve(
+        query: str,
+        document_id: str,
+        user_id: str,
+        k: int = 5,
+        *,
+        client: Any = None,
+    ) -> list[Document]:
+        """Return different chunk lists on successive calls."""
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -209,7 +220,10 @@ async def test_execute_generates_variants_retrieves_deduplicates_and_streams():
         CitationsEvent(citations=[Citation(page=1)]),
     ]
 
-    async def fake_stream(query, chunks):
+    async def fake_stream(
+        query: str, chunks: list[Document]
+    ) -> AsyncIterator[StreamEvent]:
+        """Yield pre-built fake events for testing."""
         for event in fake_events:
             yield event
 

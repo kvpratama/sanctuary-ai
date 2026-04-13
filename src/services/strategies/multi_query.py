@@ -64,12 +64,13 @@ async def generate_query_variants(query: str, *, n: int = 3) -> list[str]:
             )
             return [query]
 
-        logger.info(
-            "Generated %d query variants from: '%s'", len(response.variants), query
-        )
+        logger.info("Generated %d query variants", len(response.variants))
         return response.variants
     except Exception:
-        logger.warning("Multi-query generation failed, falling back to original query")
+        logger.warning(
+            "Multi-query generation failed, falling back to original query",
+            exc_info=True,
+        )
         return [query]
 
 

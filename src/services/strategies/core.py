@@ -163,8 +163,8 @@ async def stream_answer_with_citations(
                 yield TokenEvent(token=token)
     except GeneratorExit:
         logger.warning(
-            "Generator cancelled before completion, full_answer so far: %s",
-            full_answer[:100],
+            "Generator cancelled before completion, accumulated_length=%d",
+            len(full_answer),
         )
         return
 
