@@ -225,8 +225,8 @@ async def test_stream_answer_empty_llm_response_yields_fallback_token() -> None:
 
     async def empty_astream(prompt: Any) -> AsyncIterator[AIMessageChunk]:
         """Yield nothing, simulating an empty LLM response."""
-        return
-        yield  # noqa: RET504 — makes this an async generator  # ty: ignore[invalid-yield]
+        if False:
+            yield AIMessageChunk(content="")
 
     mock_settings = MagicMock()
     mock_settings.llm_model = "gpt-4o-mini"
