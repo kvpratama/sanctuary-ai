@@ -9,7 +9,7 @@ from collections.abc import AsyncGenerator
 from langsmith import traceable
 
 from src.schemas.chat import ChunksEvent, RetrievedChunk, StreamEvent
-from src.services.retrieval import retrieve_chunks, stream_answer_with_citations
+from src.services.strategies.core import retrieve_chunks, stream_answer_with_citations
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)

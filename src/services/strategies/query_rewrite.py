@@ -13,7 +13,7 @@ from langsmith import traceable
 from src.config import get_settings
 from src.prompts.manager import pull_eval_prompt
 from src.schemas.chat import ChunksEvent, RetrievedChunk, StreamEvent
-from src.services.retrieval import retrieve_chunks, stream_answer_with_citations
+from src.services.strategies.core import retrieve_chunks, stream_answer_with_citations
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)

@@ -110,6 +110,21 @@ QUERY_REWRITE_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
     ]
 )
 
+MULTI_QUERY_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a search query generator. Given a user's question, generate {n} "
+            "different versions of the question that capture different angles or phrasings. "
+            "Each version should help retrieve relevant documents from a vector store.",
+        ),
+        (
+            "human",
+            "Original question: {query}",
+        ),
+    ]
+)
+
 FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-eval-correctness": CORRECTNESS_PROMPT_HARDCODED,
     "sanctuary-eval-relevance": RELEVANCE_PROMPT_HARDCODED,
@@ -117,6 +132,7 @@ FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-eval-retrieval-relevance": RETRIEVAL_RELEVANCE_PROMPT_HARDCODED,
     "sanctuary-rag-prompt": RAG_PROMPT_HARDCODED,
     "sanctuary-query-rewrite": QUERY_REWRITE_PROMPT_HARDCODED,
+    "sanctuary-multi-query": MULTI_QUERY_PROMPT_HARDCODED,
 }
 
 

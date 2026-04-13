@@ -17,6 +17,13 @@ def test_get_strategy_returns_query_rewrite() -> None:
     assert strategy.__module__ == "src.services.strategies.query_rewrite"
 
 
+def test_get_strategy_returns_multi_query() -> None:
+    """get_strategy('multi_query') returns the multi_query execute function."""
+    strategy = get_strategy("multi_query")
+    assert callable(strategy)
+    assert strategy.__module__ == "src.services.strategies.multi_query"
+
+
 def test_get_strategy_unknown_raises_value_error() -> None:
     """get_strategy raises ValueError for unknown strategy names."""
     with pytest.raises(ValueError, match="Unknown RAG strategy: 'nonexistent'"):
