@@ -117,6 +117,74 @@ async def test_search_tool_returns_no_additional_message():
     assert "No additional information found" in result
 
 
+# --- _extract_system_text tests ---
+
+
+def test_extract_system_text_returns_template_text():
+    """_extract_system_text should return the system message template."""
+    from langchain_core.prompts import ChatPromptTemplate
+
+    from src.services.strategies.agentic_rag import _extract_system_text
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", "You are a helpful assistant."),
+            ("human", "{query}"),
+        ]
+    )
+    result = _extract_system_text(prompt)
+    assert result == "You are a helpful assistant."
+
+
+def test_extract_system_text_finds_system_at_non_zero_position():
+    """_extract_system_text should find the system message even if not first."""
+    from langchain_core.prompts import ChatPromptTemplate
+
+    from src.services.strategies.agentic_rag import _extract_system_text
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("human", "Hello"),
+            ("system", "You are a research assistant."),
+            ("human", "{query}"),
+        ]
+    )
+    result = _extract_system_text(prompt)
+    assert result == "You are a research assistant."
+
+
+def test_extract_system_text_returns_none_when_no_system_message():
+    """_extract_system_text should return None if no system message exists."""
+    from langchain_core.prompts import ChatPromptTemplate
+
+    from src.services.strategies.agentic_rag import _extract_system_text
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("human", "{query}"),
+        ]
+    )
+    result = _extract_system_text(prompt)
+    assert result is None
+
+
+def test_extract_system_text_handles_raw_system_message():
+    """_extract_system_text should handle raw SystemMessage objects."""
+    from langchain_core.messages import SystemMessage
+    from langchain_core.prompts import ChatPromptTemplate
+
+    from src.services.strategies.agentic_rag import _extract_system_text
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            SystemMessage(content="You are an assistant."),
+            ("human", "{query}"),
+        ]
+    )
+    result = _extract_system_text(prompt)
+    assert result == "You are an assistant."
+
+
 # --- _build_agent tests ---
 
 
@@ -150,6 +218,48 @@ async def test_build_agent_returns_agent():
                 accumulated_chunks=accumulated,
             )
 
+    assert agent is not None
+    assert hasattr(agent, "astream")
+
+
+@pytest.mark.asyncio
+async def test_build_agent_uses_fallback_when_pulled_prompt_has_no_system():
+    """_build_agent should fall back to hardcoded prompt if pulled has no system message."""
+    from langchain_core.prompts import ChatPromptTemplate
+
+    from src.services.strategies.agentic_rag import _build_agent
+
+    accumulated: list[Document] = []
+
+    # A pulled prompt with no system message (only human)
+    broken_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("human", "{query}"),
+        ]
+    )
+
+    with patch("src.services.strategies.agentic_rag.get_settings") as mock_settings:
+        mock_settings.return_value = MagicMock(
+            llm_model="gpt-4o-mini",
+            llm_provider="openai",
+            openai_api_key=MagicMock(get_secret_value=lambda: "test-key"),
+            llm_provider_base_url="https://api.openai.com/v1",
+        )
+        with patch(
+            "src.services.strategies.agentic_rag.pull_eval_prompt",
+            new_callable=AsyncMock,
+            return_value=broken_prompt,
+        ):
+            agent = await _build_agent(
+                query="What is the answer?",
+                document_id="doc-123",
+                user_id="user-456",
+                k=5,
+                client=None,
+                accumulated_chunks=accumulated,
+            )
+
+    # Agent should still be built using the fallback prompt
     assert agent is not None
     assert hasattr(agent, "astream")
 

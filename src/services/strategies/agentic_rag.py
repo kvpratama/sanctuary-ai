@@ -14,13 +14,14 @@ from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.graph.state import CompiledStateGraph
 from langsmith import traceable
 
 from src.config import get_settings
-from src.prompts.manager import pull_eval_prompt
+from src.prompts.manager import FALLBACK_PROMPTS, pull_eval_prompt
 from src.schemas.chat import (
     ChunksEvent,
     CitationsEvent,
@@ -32,6 +33,34 @@ from src.services.strategies.core import extract_citations, retrieve_chunks
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_system_text(prompt: ChatPromptTemplate) -> str | None:
+    """Extract the system message template text from a ``ChatPromptTemplate``.
+
+    Iterates over ``prompt.messages`` looking for the first
+    ``SystemMessagePromptTemplate`` and returns its ``.prompt.template``
+    attribute.  Also handles raw ``SystemMessage`` objects (which store
+    text in ``.content``).
+
+    Args:
+        prompt: The prompt template to inspect.
+
+    Returns:
+        The system message text, or ``None`` if no system message is found.
+    """
+    from langchain_core.messages import SystemMessage
+
+    for message in prompt.messages:
+        if isinstance(message, SystemMessagePromptTemplate):
+            template = getattr(message.prompt, "template", None)
+            if template:
+                return template
+        elif isinstance(message, SystemMessage):
+            content = message.content
+            if isinstance(content, str):
+                return content
+    return None
 
 
 def _make_search_tool(
@@ -136,7 +165,22 @@ async def _build_agent(
     )
 
     prompt = await pull_eval_prompt("sanctuary-agentic-rag")
-    system_text = prompt.messages[0].prompt.template  # ty: ignore[unresolved-attribute]
+    system_text = _extract_system_text(prompt)
+
+    if system_text is None:
+        fallback = FALLBACK_PROMPTS.get("sanctuary-agentic-rag")
+        if fallback:
+            logger.warning(
+                "Pulled prompt 'sanctuary-agentic-rag' has no system message. "
+                "Using fallback prompt.",
+            )
+            system_text = _extract_system_text(fallback)
+
+        if system_text is None:
+            raise ValueError(
+                "No system message found in pulled prompt or fallback for "
+                "'sanctuary-agentic-rag'. The prompt must contain a system message."
+            )
 
     agent = create_agent(
         model=llm,
