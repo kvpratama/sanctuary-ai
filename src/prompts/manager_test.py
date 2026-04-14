@@ -130,6 +130,16 @@ def test_retrieval_grading_prompt_has_required_variables() -> None:
     assert "document" in prompt.input_variables
 
 
+def test_agentic_rag_prompt_fallback_exists():
+    """The agentic RAG prompt fallback should be registered."""
+    from src.prompts.manager import AGENTIC_RAG_PROMPT_HARDCODED
+
+    assert "sanctuary-agentic-rag" in FALLBACK_PROMPTS
+    assert FALLBACK_PROMPTS["sanctuary-agentic-rag"] is AGENTIC_RAG_PROMPT_HARDCODED
+    messages = AGENTIC_RAG_PROMPT_HARDCODED.messages
+    assert len(messages) >= 2
+
+
 @patch("src.prompts.manager._get_client")
 def test_push_eval_prompts_logs_error_on_failure(
     mock_get_client: MagicMock,
