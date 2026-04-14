@@ -130,7 +130,7 @@ def test_retrieval_grading_prompt_has_required_variables() -> None:
     assert "document" in prompt.input_variables
 
 
-def test_agentic_rag_prompt_fallback_exists():
+def test_agentic_rag_prompt_fallback_exists() -> None:
     """The agentic RAG prompt fallback should be registered."""
     from src.prompts.manager import AGENTIC_RAG_PROMPT_HARDCODED
 

@@ -13,8 +13,10 @@ from typing import Any
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from langgraph.graph.state import CompiledStateGraph
 from langsmith import traceable
 
 from src.config import get_settings
@@ -39,7 +41,7 @@ def _make_search_tool(
     k: int,
     client: AsyncClient | None,
     accumulated_chunks: list[Document],
-):
+) -> Any:
     """Create a search tool bound to the current retrieval context.
 
     The tool accumulates retrieved chunks (deduplicated) into the
@@ -101,7 +103,7 @@ async def _build_agent(
     k: int,
     client: AsyncClient | None,
     accumulated_chunks: list[Document],
-):
+) -> CompiledStateGraph:
     """Build the agentic RAG agent with a search tool.
 
     Args:
@@ -122,6 +124,7 @@ async def _build_agent(
         api_key=settings.openai_api_key.get_secret_value(),
         base_url=settings.llm_provider_base_url,
         temperature=0,
+        streaming=True,
     )
 
     search_tool = _make_search_tool(
@@ -182,7 +185,7 @@ async def execute(
     )
 
     settings = get_settings()
-    config: dict[str, Any] = {
+    config: RunnableConfig = {
         "configurable": {"thread_id": f"agentic-rag-{document_id}-{user_id}"},
         "recursion_limit": settings.agentic_rag_max_iterations,
     }
@@ -195,11 +198,12 @@ async def execute(
         config=config,
         stream_mode="messages",
     ):
-        if not isinstance(msg, AIMessageChunk):
+        # Accept both streamed chunks and final messages
+        if not isinstance(msg, (AIMessageChunk, AIMessage)):
             continue
 
         # Skip tool-call chunks (intermediate reasoning)
-        if msg.tool_call_chunks:
+        if isinstance(msg, AIMessageChunk) and msg.tool_call_chunks:
             continue
 
         # Yield chunks once, right before the first final-answer token

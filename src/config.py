@@ -49,7 +49,7 @@ class Settings(BaseSettings):
             min_similarity: Minimum similarity threshold for retrieval.
             max_retries: Maximum number of retries for the self-correcting RAG strategy (default: 3).
             min_relevant_chunks: Minimum number of relevant chunks required for the self-correcting RAG strategy (default: 3).
-            agentic_rag_max_iterations: Maximum recursion steps for the agentic RAG agent (default: 15).
+            agentic_rag_max_iterations: Maximum recursion steps for the agentic RAG agent (default: 10).
             cors_origins: List of allowed CORS origins.
             eval_llm_model: Language model to use for evaluations (default: gpt-4o-mini).
             eval_llm_provider: LLM provider for evaluations (default: openai).
