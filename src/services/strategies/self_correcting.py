@@ -106,8 +106,8 @@ async def grade_relevance_node(state: SelfCorrectingState) -> dict:
     if not chunks:
         return {"chunks": []}
 
+    settings = get_settings()
     try:
-        settings = get_settings()
         llm = init_chat_model(
             model=settings.grading_llm_model,
             model_provider=settings.llm_provider,
