@@ -273,7 +273,7 @@ async def test_build_agent_uses_fallback_when_pulled_prompt_has_no_system() -> N
 
 @pytest.mark.asyncio
 async def test_execute_yields_chunks_then_tokens_then_citations() -> None:
-    """Execute should yield ChunksEvent, TokenEvents, then CitationsEvent."""
+    """Execute should yield TokenEvents, then ChunksEvent, then CitationsEvent."""
     from src.services.strategies.agentic_rag import execute
 
     mock_chunk = Document(page_content="Answer is 42.", metadata={"page": 5})
@@ -307,12 +307,13 @@ async def test_execute_yields_chunks_then_tokens_then_citations() -> None:
         async for event in execute("What is the answer?", "doc-123", "user-456"):  # ty: ignore[invalid-argument-type]
             events.append(event)
 
-        assert isinstance(events[0], ChunksEvent)
-        assert len(events[0].chunks) == 1
-        assert events[0].chunks[0].page_content == "Answer is 42."
-        assert events[0].chunks[0].page == 5
+        # ChunksEvent is yielded after all tokens, before CitationsEvent
+        assert isinstance(events[-2], ChunksEvent)
+        assert len(events[-2].chunks) == 1
+        assert events[-2].chunks[0].page_content == "Answer is 42."
+        assert events[-2].chunks[0].page == 5
 
-        for e in events[1:-1]:
+        for e in events[:-2]:
             assert isinstance(e, TokenEvent)
 
         assert isinstance(events[-1], CitationsEvent)

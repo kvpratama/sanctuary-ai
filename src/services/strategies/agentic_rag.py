@@ -233,7 +233,8 @@ async def execute(
         client: Optional Supabase client to reuse.
 
     Yields:
-        ChunksEvent with final documents, then TokenEvent and CitationsEvent.
+        TokenEvent for streamed answer tokens, then ChunksEvent with final
+        documents, and CitationsEvent.
     """
     settings = get_settings()
     accumulated: list[Document] = []
@@ -252,7 +253,6 @@ async def execute(
         "configurable": {"thread_id": f"agentic-rag-{document_id}-{user_id}"},
     }
 
-    chunks_yielded = False
     full_answer = ""
 
     async for msg, metadata in agent.astream(
@@ -260,34 +260,22 @@ async def execute(
         config=config,
         stream_mode="messages",
     ):
-        # Accept both streamed chunks and final messages
-        if not isinstance(msg, (AIMessageChunk, AIMessage)):
-            continue
+        if isinstance(msg, (AIMessageChunk, AIMessage)) and not (
+            isinstance(msg, AIMessageChunk) and msg.tool_call_chunks
+        ):
+            token = msg.content if isinstance(msg.content, str) else str(msg.content)
+            if token:
+                full_answer += token
+                yield TokenEvent(token=token)
 
-        # Skip tool-call chunks (intermediate reasoning)
-        if isinstance(msg, AIMessageChunk) and msg.tool_call_chunks:
-            continue
-
-        # Yield chunks once, right before the first final-answer token
-        if not chunks_yielded:
-            chunks_yielded = True
-            yield ChunksEvent(
-                chunks=[
-                    RetrievedChunk(
-                        page_content=c.page_content, page=c.metadata.get("page")
-                    )
-                    for c in accumulated
-                ]
-            )
-
-        token = msg.content if isinstance(msg.content, str) else str(msg.content)
-        if token:
-            full_answer += token
-            yield TokenEvent(token=token)
-
-    # If the agent never produced a final answer (e.g. no chunks found)
-    if not chunks_yielded:
-        yield ChunksEvent(chunks=[])
+    # Yield ChunksEvent after streaming completes, so all accumulated
+    # chunks are available and the event ordering is deterministic.
+    yield ChunksEvent(
+        chunks=[
+            RetrievedChunk(page_content=c.page_content, page=c.metadata.get("page"))
+            for c in accumulated
+        ]
+    )
 
     if not full_answer:
         yield TokenEvent(
