@@ -139,6 +139,30 @@ RETRIEVAL_GRADING_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
     ]
 )
 
+AGENTIC_RAG_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a research assistant that answers questions based ONLY on the "
+            "content retrieved via the search_docs tool. Do not use any outside "
+            "knowledge. If the answer cannot be found in the retrieved content, say so.\n\n"
+            "The search_docs tool returns passages prefixed with [Page X] indicating "
+            "their source page number.\n\n"
+            "Guidelines:\n"
+            "- Be specific with your search queries (3-8 words)\n"
+            "- Try different angles if one query returns nothing\n"
+            "- When you have gathered enough information, stop searching and answer "
+            "the question directly\n"
+            "- Do not repeat the same search query\n"
+            "- Always cite your sources using [p. X] format where X is the page number",
+        ),
+        (
+            "human",
+            "{query}",
+        ),
+    ]
+)
+
 FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-eval-correctness": CORRECTNESS_PROMPT_HARDCODED,
     "sanctuary-eval-relevance": RELEVANCE_PROMPT_HARDCODED,
@@ -148,6 +172,7 @@ FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-query-rewrite": QUERY_REWRITE_PROMPT_HARDCODED,
     "sanctuary-multi-query": MULTI_QUERY_PROMPT_HARDCODED,
     "sanctuary-retrieval-grading": RETRIEVAL_GRADING_PROMPT_HARDCODED,
+    "sanctuary-agentic-rag": AGENTIC_RAG_PROMPT_HARDCODED,
 }
 
 
