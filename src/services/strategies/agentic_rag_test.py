@@ -1,11 +1,13 @@
 """Tests for the agentic RAG strategy."""
 
+from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessageChunk
+from langgraph.graph.state import CompiledStateGraph
 
 from src.schemas.chat import ChunksEvent, CitationsEvent, TokenEvent
 
@@ -13,7 +15,7 @@ from src.schemas.chat import ChunksEvent, CitationsEvent, TokenEvent
 
 
 @pytest.mark.asyncio
-async def test_search_tool_returns_chunk_content():
+async def test_search_tool_returns_chunk_content() -> None:
     """The search_docs tool should return formatted chunk content."""
     from src.services.strategies.agentic_rag import _make_search_tool
 
@@ -43,7 +45,7 @@ async def test_search_tool_returns_chunk_content():
 
 
 @pytest.mark.asyncio
-async def test_search_tool_accumulates_new_chunks():
+async def test_search_tool_accumulates_new_chunks() -> None:
     """The search_docs tool should deduplicate and accumulate new chunks."""
     from src.services.strategies.agentic_rag import _make_search_tool
 
@@ -69,7 +71,7 @@ async def test_search_tool_accumulates_new_chunks():
 
 
 @pytest.mark.asyncio
-async def test_search_tool_returns_no_results_message():
+async def test_search_tool_returns_no_results_message() -> None:
     """The search_docs tool should return a message when no chunks found."""
     from src.services.strategies.agentic_rag import _make_search_tool
 
@@ -93,7 +95,7 @@ async def test_search_tool_returns_no_results_message():
 
 
 @pytest.mark.asyncio
-async def test_search_tool_returns_no_additional_message():
+async def test_search_tool_returns_no_additional_message() -> None:
     """The search_docs tool should return message when all chunks are duplicates."""
     from src.services.strategies.agentic_rag import _make_search_tool
 
@@ -189,7 +191,7 @@ def test_extract_system_text_handles_raw_system_message():
 
 
 @pytest.mark.asyncio
-async def test_build_agent_returns_agent():
+async def test_build_agent_returns_agent() -> None:
     """_build_agent should return an agent with astream."""
     from src.services.strategies.agentic_rag import _build_agent
 
@@ -223,7 +225,7 @@ async def test_build_agent_returns_agent():
 
 
 @pytest.mark.asyncio
-async def test_build_agent_uses_fallback_when_pulled_prompt_has_no_system():
+async def test_build_agent_uses_fallback_when_pulled_prompt_has_no_system() -> None:
     """_build_agent should fall back to hardcoded prompt if pulled has no system message."""
     from langchain_core.prompts import ChatPromptTemplate
 
@@ -268,16 +270,26 @@ async def test_build_agent_uses_fallback_when_pulled_prompt_has_no_system():
 
 
 @pytest.mark.asyncio
-async def test_execute_yields_chunks_then_tokens_then_citations():
+async def test_execute_yields_chunks_then_tokens_then_citations() -> None:
     """Execute should yield ChunksEvent, TokenEvents, then CitationsEvent."""
     from src.services.strategies.agentic_rag import execute
 
     mock_chunk = Document(page_content="Answer is 42.", metadata={"page": 5})
 
     async def fake_build_agent(
-        *, query, document_id, user_id, k, client, accumulated_chunks
-    ):
-        async def fake_astream(input_dict, config=None, stream_mode=None):
+        *,
+        query: str,
+        document_id: str,
+        user_id: str,
+        k: int,
+        client: Any,
+        accumulated_chunks: list[Document],
+    ) -> CompiledStateGraph:
+        async def fake_astream(
+            input_dict: dict[str, Any],
+            config: Any = None,
+            stream_mode: Any = None,
+        ) -> AsyncGenerator[tuple[AIMessageChunk, dict[str, str]], None]:
             accumulated_chunks.append(mock_chunk)
             for token in ["The ", "answer ", "is ", "42. [p. 5]"]:
                 yield AIMessageChunk(content=token), {"langgraph_node": "agent"}
@@ -305,14 +317,24 @@ async def test_execute_yields_chunks_then_tokens_then_citations():
 
 
 @pytest.mark.asyncio
-async def test_execute_yields_empty_chunks_when_no_results():
+async def test_execute_yields_empty_chunks_when_no_results() -> None:
     """Execute should yield empty ChunksEvent when agent finds nothing."""
     from src.services.strategies.agentic_rag import execute
 
     async def fake_build_agent(
-        *, query, document_id, user_id, k, client, accumulated_chunks
-    ):
-        async def fake_astream(input_dict, config=None, stream_mode=None):
+        *,
+        query: str,
+        document_id: str,
+        user_id: str,
+        k: int,
+        client: Any,
+        accumulated_chunks: list[Document],
+    ) -> CompiledStateGraph:
+        async def fake_astream(
+            input_dict: dict[str, Any],
+            config: Any = None,
+            stream_mode: Any = None,
+        ) -> Any:
             return
             yield  # noqa: F841 — makes this an async generator
 
@@ -333,16 +355,26 @@ async def test_execute_yields_empty_chunks_when_no_results():
 
 
 @pytest.mark.asyncio
-async def test_execute_passes_recursion_limit_to_agent():
+async def test_execute_passes_recursion_limit_to_agent() -> None:
     """Execute should pass recursion_limit from settings."""
     from src.services.strategies.agentic_rag import execute
 
     captured_config: dict[str, Any] = {}
 
     async def fake_build_agent(
-        *, query, document_id, user_id, k, client, accumulated_chunks
-    ):
-        async def fake_astream(input_dict, config=None, stream_mode=None):
+        *,
+        query: str,
+        document_id: str,
+        user_id: str,
+        k: int,
+        client: Any,
+        accumulated_chunks: list[Document],
+    ) -> CompiledStateGraph:
+        async def fake_astream(
+            input_dict: dict[str, Any],
+            config: Any = None,
+            stream_mode: Any = None,
+        ) -> Any:
             captured_config["config"] = config
             return
             yield  # noqa: F841 — makes this an async generator
@@ -365,16 +397,26 @@ async def test_execute_passes_recursion_limit_to_agent():
 
 
 @pytest.mark.asyncio
-async def test_execute_skips_tool_call_chunks():
+async def test_execute_skips_tool_call_chunks() -> None:
     """Execute should skip AIMessageChunks that contain tool_call_chunks."""
     from src.services.strategies.agentic_rag import execute
 
     mock_chunk = Document(page_content="Some info.", metadata={"page": 1})
 
     async def fake_build_agent(
-        *, query, document_id, user_id, k, client, accumulated_chunks
-    ):
-        async def fake_astream(input_dict, config=None, stream_mode=None):
+        *,
+        query: str,
+        document_id: str,
+        user_id: str,
+        k: int,
+        client: Any,
+        accumulated_chunks: list[Document],
+    ) -> CompiledStateGraph:
+        async def fake_astream(
+            input_dict: dict[str, Any],
+            config: Any = None,
+            stream_mode: Any = None,
+        ) -> AsyncGenerator[tuple[AIMessageChunk, dict[str, str]], None]:
             accumulated_chunks.append(mock_chunk)
             tool_msg = AIMessageChunk(content="")
             tool_msg.tool_call_chunks = [{"name": "search_docs", "args": "{}"}]  # ty:ignore[invalid-assignment]
