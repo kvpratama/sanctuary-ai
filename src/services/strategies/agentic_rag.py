@@ -4,6 +4,10 @@ Uses LangChain's create_agent() with a search_docs tool backed by
 retrieve_chunks. The agent autonomously searches, gathers context,
 and decides when to answer.  The agent's own streamed answer is used
 directly — no second LLM call is needed.
+
+Iteration control is handled by ToolCallLimitMiddleware, which gracefully
+stops the agent when limits are reached rather than abruptly cutting off
+execution like recursion_limit.
 """
 
 import logging
@@ -11,6 +15,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from langchain.agents import create_agent
+from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, AIMessageChunk
@@ -132,6 +137,7 @@ async def _build_agent(
     k: int,
     client: AsyncClient | None,
     accumulated_chunks: list[Document],
+    max_tool_calls: int,
 ) -> CompiledStateGraph:
     """Build the agentic RAG agent with a search tool.
 
@@ -142,6 +148,7 @@ async def _build_agent(
         k: Number of chunks per search.
         client: Optional Supabase client.
         accumulated_chunks: Mutable list for chunk accumulation.
+        max_tool_calls: Maximum number of tool calls allowed per run.
 
     Returns:
         A compiled agent ready for invocation.
@@ -182,10 +189,17 @@ async def _build_agent(
                 "'sanctuary-agentic-rag'. The prompt must contain a system message."
             )
 
+    # Use ToolCallLimitMiddleware for graceful iteration control
+    iteration_limiter = ToolCallLimitMiddleware(
+        run_limit=max_tool_calls,
+        exit_behavior="continue",
+    )
+
     agent = create_agent(
         model=llm,
         tools=[search_tool],
         system_prompt=system_text,
+        middleware=[iteration_limiter],
     )
 
     return agent
@@ -207,6 +221,10 @@ async def execute(
     The agent's own streamed response is forwarded as ``TokenEvent`` objects
     so only a single LLM generation is performed.
 
+    Iteration control is managed by ToolCallLimitMiddleware which gracefully
+    terminates the agent when the limit is reached, allowing it to produce
+    a final answer based on gathered context.
+
     Args:
         query: The user's original question.
         document_id: UUID of the document to search within.
@@ -217,6 +235,7 @@ async def execute(
     Yields:
         ChunksEvent with final documents, then TokenEvent and CitationsEvent.
     """
+    settings = get_settings()
     accumulated: list[Document] = []
 
     agent = await _build_agent(
@@ -226,12 +245,11 @@ async def execute(
         k=k,
         client=client,
         accumulated_chunks=accumulated,
+        max_tool_calls=settings.max_tool_calls,
     )
 
-    settings = get_settings()
     config: RunnableConfig = {
         "configurable": {"thread_id": f"agentic-rag-{document_id}-{user_id}"},
-        "recursion_limit": settings.agentic_rag_max_iterations,
     }
 
     chunks_yielded = False

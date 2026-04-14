@@ -191,8 +191,8 @@ def test_extract_system_text_handles_raw_system_message():
 
 
 @pytest.mark.asyncio
-async def test_build_agent_returns_agent() -> None:
-    """_build_agent should return an agent with astream."""
+async def test_build_agent_returns_configured_agent() -> None:
+    """_build_agent should return an agent with middleware for iteration control."""
     from src.services.strategies.agentic_rag import _build_agent
 
     accumulated: list[Document] = []
@@ -218,6 +218,7 @@ async def test_build_agent_returns_agent() -> None:
                 k=5,
                 client=None,
                 accumulated_chunks=accumulated,
+                max_tool_calls=10,
             )
 
     assert agent is not None
@@ -259,6 +260,7 @@ async def test_build_agent_uses_fallback_when_pulled_prompt_has_no_system() -> N
                 k=5,
                 client=None,
                 accumulated_chunks=accumulated,
+                max_tool_calls=10,
             )
 
     # Agent should still be built using the fallback prompt
@@ -284,6 +286,7 @@ async def test_execute_yields_chunks_then_tokens_then_citations() -> None:
         k: int,
         client: Any,
         accumulated_chunks: list[Document],
+        max_tool_calls: int,
     ) -> CompiledStateGraph:
         async def fake_astream(
             input_dict: dict[str, Any],
@@ -329,6 +332,7 @@ async def test_execute_yields_empty_chunks_when_no_results() -> None:
         k: int,
         client: Any,
         accumulated_chunks: list[Document],
+        max_tool_calls: int,
     ) -> CompiledStateGraph:
         async def fake_astream(
             input_dict: dict[str, Any],
@@ -355,11 +359,11 @@ async def test_execute_yields_empty_chunks_when_no_results() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_passes_recursion_limit_to_agent() -> None:
-    """Execute should pass recursion_limit from settings."""
+async def test_execute_passes_max_tool_calls_to_build_agent() -> None:
+    """Execute should pass max_tool_calls from settings to _build_agent."""
     from src.services.strategies.agentic_rag import execute
 
-    captured_config: dict[str, Any] = {}
+    captured_max_tool_calls: int | None = None
 
     async def fake_build_agent(
         *,
@@ -369,13 +373,16 @@ async def test_execute_passes_recursion_limit_to_agent() -> None:
         k: int,
         client: Any,
         accumulated_chunks: list[Document],
+        max_tool_calls: int,
     ) -> CompiledStateGraph:
+        nonlocal captured_max_tool_calls
+        captured_max_tool_calls = max_tool_calls
+
         async def fake_astream(
             input_dict: dict[str, Any],
             config: Any = None,
             stream_mode: Any = None,
         ) -> Any:
-            captured_config["config"] = config
             return
             yield  # noqa: F841 — makes this an async generator
 
@@ -388,12 +395,15 @@ async def test_execute_passes_recursion_limit_to_agent() -> None:
         ),
         patch("src.services.strategies.agentic_rag.get_settings") as mock_settings,
     ):
-        mock_settings.return_value = MagicMock(agentic_rag_max_iterations=15)
+        # Return a real integer for max_tool_calls
+        mock_settings_instance = MagicMock()
+        mock_settings_instance.max_tool_calls = 15
+        mock_settings.return_value = mock_settings_instance
 
         async for _ in execute("test?", "doc-123", "user-456"):  # ty: ignore[invalid-argument-type]
             pass
 
-    assert captured_config["config"]["recursion_limit"] == 15
+    assert captured_max_tool_calls == 15
 
 
 @pytest.mark.asyncio
@@ -411,6 +421,7 @@ async def test_execute_skips_tool_call_chunks() -> None:
         k: int,
         client: Any,
         accumulated_chunks: list[Document],
+        max_tool_calls: int,
     ) -> CompiledStateGraph:
         async def fake_astream(
             input_dict: dict[str, Any],
