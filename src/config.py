@@ -44,8 +44,11 @@ class Settings(BaseSettings):
             llm_model: Language model to use (default: gpt-4o-mini).
             llm_provider: LLM provider name (default: openai).
             llm_provider_base_url: Base URL for LLM provider API.
+            grading_llm_model: Language model to use for internal relevance grading (default: gpt-4o-mini).
             embedding_model: Embedding model to use (default: gemini-embedding-001).
             min_similarity: Minimum similarity threshold for retrieval.
+            max_retries: Maximum number of retries for the self-correcting RAG strategy (default: 3).
+            min_relevant_chunks: Minimum number of relevant chunks required for the self-correcting RAG strategy (default: 3).
             cors_origins: List of allowed CORS origins.
             eval_llm_model: Language model to use for evaluations (default: gpt-4o-mini).
             eval_llm_provider: LLM provider for evaluations (default: openai).
@@ -79,9 +82,12 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_provider: str = "openai"
     llm_provider_base_url: str = "https://api.openai.com/v1"
+    grading_llm_model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
 
     min_similarity: float = 0.6
+    max_retries: int = 3
+    min_relevant_chunks: int = 3
 
     cors_origins: list[str] = ["http://localhost:3000"]
 

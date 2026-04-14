@@ -265,7 +265,8 @@ async def test_stream_answer_empty_llm_response_yields_fallback_token() -> None:
     assert len(results) == 2
     assert results[0].type == "token"
     assert (
-        results[0].token == "I don't have enough information to answer that question."
+        results[0].token
+        == "Something went wrong while generating the answer. Please try again."
     )
     assert results[1].type == "citations"
     assert results[1].citations == []
@@ -283,7 +284,8 @@ async def test_stream_answer_with_citations_no_chunks() -> None:
 
     assert results[0].type == "token"
     assert (
-        results[0].token == "I don't have enough information to answer that question."
+        results[0].token
+        == "The document doesn't contain enough information to answer this question. Try rephrasing or checking other documents."
     )
     assert results[1].type == "citations"
     assert results[1].citations == []

@@ -118,6 +118,18 @@ def test_multi_query_prompt_has_query_and_n_variables() -> None:
     assert "n" in prompt.input_variables
 
 
+def test_retrieval_grading_fallback_prompt_exists() -> None:
+    """A fallback prompt is registered for sanctuary-retrieval-grading."""
+    assert "sanctuary-retrieval-grading" in FALLBACK_PROMPTS
+
+
+def test_retrieval_grading_prompt_has_required_variables() -> None:
+    """The retrieval grading prompt accepts 'query' and 'document' variables."""
+    prompt = FALLBACK_PROMPTS["sanctuary-retrieval-grading"]
+    assert "query" in prompt.input_variables
+    assert "document" in prompt.input_variables
+
+
 @patch("src.prompts.manager._get_client")
 def test_push_eval_prompts_logs_error_on_failure(
     mock_get_client: MagicMock,

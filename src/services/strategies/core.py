@@ -126,7 +126,7 @@ async def stream_answer_with_citations(
     """
     if not chunks:
         yield TokenEvent(
-            token="I don't have enough information to answer that question."
+            token="The document doesn't contain enough information to answer this question. Try rephrasing or checking other documents."
         )
         yield CitationsEvent(citations=[])
         return
@@ -170,7 +170,7 @@ async def stream_answer_with_citations(
 
     if not full_answer:
         yield TokenEvent(
-            token="I don't have enough information to answer that question."
+            token="Something went wrong while generating the answer. Please try again."
         )
 
     citations = extract_citations(full_answer, chunks)
