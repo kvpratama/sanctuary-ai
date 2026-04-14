@@ -71,6 +71,38 @@ async def test_search_tool_accumulates_new_chunks() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_tool_returns_empty_query_message() -> None:
+    """The search_docs tool should return a prompt when query is empty or whitespace."""
+    from src.services.strategies.agentic_rag import _make_search_tool
+
+    accumulated: list[Document] = []
+
+    search_tool = _make_search_tool(
+        document_id="doc-123",
+        user_id="user-456",
+        k=5,
+        client=None,
+        accumulated_chunks=accumulated,
+    )
+
+    # Test with empty string
+    result = await search_tool.ainvoke({"query": ""})
+    assert "Please provide a specific search query" in result
+
+    # Test with whitespace-only
+    result = await search_tool.ainvoke({"query": "   "})
+    assert "Please provide a specific search query" in result
+
+    # Ensure retrieve_chunks was never called for empty queries
+    with patch(
+        "src.services.strategies.agentic_rag.retrieve_chunks",
+        new_callable=AsyncMock,
+    ) as mock_retrieve:
+        await search_tool.ainvoke({"query": ""})
+        mock_retrieve.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_search_tool_returns_no_results_message() -> None:
     """The search_docs tool should return a message when no chunks found."""
     from src.services.strategies.agentic_rag import _make_search_tool

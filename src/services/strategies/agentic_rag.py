@@ -93,7 +93,7 @@ def _make_search_tool(
     """
 
     @tool
-    async def search_docs(query: str) -> str:
+    async def search_docs(query: str = "") -> str:
         """Search the document for relevant information.
 
         Use this tool to find specific facts, concepts, or details
@@ -102,6 +102,12 @@ def _make_search_tool(
         Args:
             query: The specific search query (3-8 words recommended)
         """
+
+        if not query.strip():
+            return (
+                "Please provide a specific search query to find relevant information."
+            )
+
         chunks = await retrieve_chunks(
             query=query,  # ty: ignore[invalid-argument-type]
             document_id=document_id,  # ty: ignore[invalid-argument-type]
