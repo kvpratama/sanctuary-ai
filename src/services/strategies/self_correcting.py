@@ -14,6 +14,7 @@ from typing import Literal, TypedDict
 from langchain.chat_models import init_chat_model
 from langchain_core.documents import Document
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langsmith import traceable
 from pydantic import BaseModel, Field
 
@@ -25,9 +26,6 @@ from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 3
-MIN_RELEVANT_CHUNKS = 3
-
 
 class RelevanceGrade(BaseModel):
     """Structured output for a single chunk relevance judgment."""
@@ -37,7 +35,7 @@ class RelevanceGrade(BaseModel):
     )
 
 
-class SelfCorrectingState(TypedDict, total=False):
+class SelfCorrectingState(TypedDict):
     """State for the self-correcting RAG graph.
 
     Attributes:
@@ -137,15 +135,15 @@ async def grade_relevance_node(state: SelfCorrectingState) -> dict:
             "Relevance grading: %d/%d relevant (threshold: %d)",
             len(relevant_chunks),
             len(chunks),
-            MIN_RELEVANT_CHUNKS,
+            settings.min_relevant_chunks,
         )
         return {"chunks": relevant_chunks}
     except Exception:
-        if state.get("retry_count", 0) < MAX_RETRIES:
+        if state.get("retry_count", 0) < settings.max_retries:
             logger.warning(
                 "Relevance grading failed, clearing chunks to trigger rewrite (%d/%d)",
                 state.get("retry_count", 0),
-                MAX_RETRIES,
+                settings.max_retries,
                 exc_info=True,
             )
             return {"chunks": []}
@@ -199,7 +197,11 @@ async def rewrite_node(state: SelfCorrectingState) -> dict:
             )
             rewritten = state["query"]
 
-        logger.info("Self-correcting rewrite: '%s' -> '%s'", state["query"], rewritten)
+        logger.info(
+            "Self-correcting rewrite completed (changed=%s, retry=%d)",
+            rewritten != state["query"],
+            state.get("retry_count", 0) + 1,
+        )
     except Exception:
         logger.warning(
             "Self-correcting rewrite failed, falling back to original query",
@@ -231,13 +233,14 @@ def should_retry(state: SelfCorrectingState) -> Literal["rewrite"] | str:
         ``"rewrite"`` if fewer than ``MIN_RELEVANT_CHUNKS`` chunks remain
         and retries remain, otherwise ``END``.
     """
-    has_enough = len(state.get("chunks", [])) >= MIN_RELEVANT_CHUNKS
-    if not has_enough and state.get("retry_count", 0) < MAX_RETRIES:
+    settings = get_settings()
+    has_enough = len(state.get("chunks", [])) >= settings.min_relevant_chunks
+    if not has_enough and state.get("retry_count", 0) < settings.max_retries:
         return "rewrite"
     return END
 
 
-def build_graph() -> StateGraph:
+def build_graph() -> CompiledStateGraph:
     """Build and compile the self-correcting RAG graph.
 
     Returns:
@@ -249,12 +252,12 @@ def build_graph() -> StateGraph:
     graph.add_node("grade", grade_relevance_node)
     graph.add_node("rewrite", rewrite_node)
 
-    graph.add_edge(START, "retrieve")
+    graph.add_edge(START, "rewrite")
+    graph.add_edge("rewrite", "retrieve")
     graph.add_edge("retrieve", "grade")
     graph.add_conditional_edges("grade", should_retry, ["rewrite", END])
-    graph.add_edge("rewrite", "retrieve")
 
-    return graph.compile()  # ty:ignore[invalid-return-type]
+    return graph.compile()
 
 
 @traceable(metadata={"rag_strategy": "self_correcting"})
@@ -295,7 +298,7 @@ async def execute(
         "answer": "",
     }
 
-    final_state = await graph.ainvoke(initial_state)  # ty:ignore[unresolved-attribute]
+    final_state = await graph.ainvoke(initial_state)
     chunks = final_state.get("chunks", [])
 
     yield ChunksEvent(

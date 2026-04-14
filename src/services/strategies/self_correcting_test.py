@@ -6,14 +6,12 @@ import pytest
 from langchain_core.documents import Document
 
 from src.services.strategies.self_correcting import (
-    MAX_RETRIES,
-    MIN_RELEVANT_CHUNKS,
     RelevanceGrade,
     SelfCorrectingState,
 )
 
 
-def test_self_correcting_state_has_required_fields():
+def test_self_correcting_state_has_required_fields() -> None:
     """SelfCorrectingState has all required fields with correct defaults."""
     state = SelfCorrectingState(
         query="test question",
@@ -120,6 +118,7 @@ async def test_grade_relevance_node_marks_relevant_when_meets_threshold():
     mock_settings.openai_api_key = SecretStr("fake-key")
     mock_settings.llm_provider_base_url = "https://api.openai.com/v1"
     mock_settings.grading_llm_model = "gpt-4o-mini"
+    mock_settings.min_relevant_chunks = 3
 
     relevant_doc_a = Document(page_content="relevant chunk A", metadata={"page": 1})
     relevant_doc_b = Document(page_content="relevant chunk B", metadata={"page": 2})
@@ -166,7 +165,7 @@ async def test_grade_relevance_node_marks_relevant_when_meets_threshold():
         result = await grade_relevance_node(state)
 
     assert result["chunks"] == [relevant_doc_a, relevant_doc_b, relevant_doc_c]
-    assert len(result["chunks"]) == MIN_RELEVANT_CHUNKS
+    assert len(result["chunks"]) == mock_settings.min_relevant_chunks
 
 
 @pytest.mark.asyncio
@@ -260,6 +259,7 @@ async def test_grade_relevance_node_falls_back_on_exception():
     mock_settings.openai_api_key = SecretStr("fake-key")
     mock_settings.llm_provider_base_url = "https://api.openai.com/v1"
     mock_settings.grading_llm_model = "gpt-4o-mini"
+    mock_settings.max_retries = 3
 
     state = SelfCorrectingState(
         query="test question",
@@ -303,6 +303,7 @@ async def test_grade_relevance_node_preserves_chunks_on_final_exception():
     mock_settings.openai_api_key = SecretStr("fake-key")
     mock_settings.llm_provider_base_url = "https://api.openai.com/v1"
     mock_settings.grading_llm_model = "gpt-4o-mini"
+    mock_settings.max_retries = 3
 
     raw_chunks = [
         Document(page_content="some chunk", metadata={"page": 1}),
@@ -315,7 +316,7 @@ async def test_grade_relevance_node_preserves_chunks_on_final_exception():
         client=None,
         retrieval_queries=["test question"],
         chunks=raw_chunks,
-        retry_count=MAX_RETRIES,
+        retry_count=mock_settings.max_retries,
         answer="",
     )
 
@@ -499,7 +500,7 @@ def test_build_graph_compiles_without_error():
 
 
 @pytest.mark.asyncio
-async def test_execute_runs_graph_and_yields_stream_events():
+async def test_execute_runs_graph_and_yields_stream_events() -> None:
     """execute runs the graph, then streams answer using the final chunks."""
     from src.schemas.chat import (
         ChunksEvent,
