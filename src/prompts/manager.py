@@ -163,6 +163,24 @@ AGENTIC_RAG_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
     ]
 )
 
+STEP_BACK_PROMPT_HARDCODED = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a question abstraction assistant. Given a specific user question, "
+            "generate a single broader, more abstract version of that question. The "
+            "step-back question should capture the general topic or principle behind "
+            "the specific question, making it useful for retrieving background context "
+            "from a document.\n\n"
+            "Return ONLY the step-back question, nothing else.",
+        ),
+        (
+            "human",
+            "Original question: {query}",
+        ),
+    ]
+)
+
 FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-eval-correctness": CORRECTNESS_PROMPT_HARDCODED,
     "sanctuary-eval-relevance": RELEVANCE_PROMPT_HARDCODED,
@@ -173,6 +191,7 @@ FALLBACK_PROMPTS: dict[str, ChatPromptTemplate] = {
     "sanctuary-multi-query": MULTI_QUERY_PROMPT_HARDCODED,
     "sanctuary-retrieval-grading": RETRIEVAL_GRADING_PROMPT_HARDCODED,
     "sanctuary-agentic-rag": AGENTIC_RAG_PROMPT_HARDCODED,
+    "sanctuary-step-back": STEP_BACK_PROMPT_HARDCODED,
 }
 
 
