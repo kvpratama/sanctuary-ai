@@ -5,7 +5,7 @@ AI-powered document analysis and retrieval system. Upload PDFs, ingest them into
 
 ## RAG Strategies
 
-The system supports six pluggable RAG strategies, configurable via the `RAG_STRATEGY` environment variable. Each strategy trades off latency, cost, and answer quality differently.
+The system supports seven pluggable RAG strategies, configurable via the `RAG_STRATEGY` environment variable. Each strategy trades off latency, cost, and answer quality differently.
 
 ### `naive_rag`
 Retrieves the top-`k` chunks most similar to the user's query, then passes them directly to the LLM to generate an answer. Fast and cheap, but sensitive to query phrasing — if the user's wording doesn't match the document's language well, retrieval quality suffers.
@@ -22,6 +22,9 @@ Adds a relevance grading loop after retrieval: each retrieved chunk is scored by
 ### `agentic_rag`
 Runs a fully autonomous LLM agent equipped with a `search_docs` tool. The agent decides what to search for, how many times to search, and when it has gathered enough context to answer. Iteration is capped by `ToolCallLimitMiddleware`. Most flexible for complex multi-part questions, but highest latency and lowest consistency.
 
+### `step_back`
+Before retrieval, an LLM generates a broader, more abstract version of the user's question — the "step-back" question. Chunks are retrieved for **both** the original and step-back queries, then merged using Reciprocal Rank Fusion (RRF). The original query is used for answer generation. Useful when specific questions fail to match the document's language but a broader framing would.
+
 
 ### Strategy Comparison
 
@@ -33,6 +36,7 @@ Runs a fully autonomous LLM agent equipped with a `search_docs` tool. The agent 
 | `self_correcting` v1 | 0.70 | 0.75 | 0.75 | 0.75 | Noisy documents |
 | `self_correcting` v2 | **0.75** | 0.75 | 0.70 | **0.75** | Highest correctness needed |
 | `agentic_rag` | 0.55 | 0.75 | 0.75 | 0.70 | Complex, multi-part questions |
+| `step_back` | — | — | — | — | Specific questions needing broader context |
 
 > **Metrics** (LLM-as-judge scores averaged across eval dataset, 0–1):
 > - **Correctness** — does the answer match the expected answer?
@@ -150,7 +154,8 @@ src/
         ├── query_rewrite.py
         ├── multi_query.py
         ├── self_correcting.py
-        └── agentic_rag.py
+        ├── agentic_rag.py
+        └── step_back.py
 ```
 
 
