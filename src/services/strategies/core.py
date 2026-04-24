@@ -113,6 +113,40 @@ def extract_citations(answer: str, chunks: list[Document]) -> list[Citation]:
     return [Citation(page=page) for page in valid_pages]
 
 
+def fuse_rrf(ranked_lists: list[list[Document]], k: int = 60) -> list[Document]:
+    """Merge multiple ranked document lists using Reciprocal Rank Fusion.
+
+    For each document appearing across the input lists, computes:
+        score(d) = Σ  1 / (k + rank)
+    where rank is the 1-based position in each list. Documents are then
+    sorted by descending score. Ties are broken by first-seen order.
+
+    Args:
+        ranked_lists: List of ranked document lists, each ordered best-first.
+        k: RRF constant (default 60, per the original RRF paper).
+
+    Returns:
+        Single list of documents sorted by descending RRF score.
+    """
+    scores: dict[str, float] = {}
+    doc_map: dict[str, Document] = {}
+
+    for ranked_list in ranked_lists:
+        for rank, doc in enumerate(ranked_list, start=1):
+            content = doc.page_content
+            scores[content] = scores.get(content, 0.0) + 1.0 / (k + rank)
+            if content not in doc_map:
+                doc_map[content] = doc
+
+    sorted_contents = sorted(
+        scores,
+        key=lambda c: scores[c],
+        reverse=True,
+    )
+
+    return [doc_map[content] for content in sorted_contents]
+
+
 @traceable
 async def stream_answer_with_citations(
     query: str,
