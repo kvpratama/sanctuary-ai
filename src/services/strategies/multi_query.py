@@ -117,7 +117,7 @@ async def execute(
         )
         per_variant_results.append(chunks)
 
-    fused_chunks = fuse_rrf(per_variant_results)
+    fused_chunks = fuse_rrf(per_variant_results, max_chunks=k)
 
     yield ChunksEvent(
         chunks=[

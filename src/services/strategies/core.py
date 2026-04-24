@@ -113,7 +113,11 @@ def extract_citations(answer: str, chunks: list[Document]) -> list[Citation]:
     return [Citation(page=page) for page in valid_pages]
 
 
-def fuse_rrf(ranked_lists: list[list[Document]], k: int = 60) -> list[Document]:
+def fuse_rrf(
+    ranked_lists: list[list[Document]],
+    k: int = 60,
+    max_chunks: int | None = None,
+) -> list[Document]:
     """Merge multiple ranked document lists using Reciprocal Rank Fusion.
 
     For each document appearing across the input lists, computes:
@@ -124,6 +128,8 @@ def fuse_rrf(ranked_lists: list[list[Document]], k: int = 60) -> list[Document]:
     Args:
         ranked_lists: List of ranked document lists, each ordered best-first.
         k: RRF constant (default 60, per the original RRF paper).
+        max_chunks: Maximum number of chunks to return. When None, all
+            chunks are returned.
 
     Returns:
         Single list of documents sorted by descending RRF score.
@@ -144,7 +150,10 @@ def fuse_rrf(ranked_lists: list[list[Document]], k: int = 60) -> list[Document]:
         reverse=True,
     )
 
-    return [doc_map[content] for content in sorted_contents]
+    result = [doc_map[content] for content in sorted_contents]
+    if max_chunks is not None:
+        return result[:max_chunks]
+    return result
 
 
 @traceable

@@ -348,6 +348,24 @@ def test_fuse_rrf_empty_sublists_returns_empty() -> None:
     assert fuse_rrf([[], []]) == []
 
 
+def test_fuse_rrf_max_chunks_limits_output() -> None:
+    """max_chunks truncates the result to the top-N documents."""
+    list_a = [
+        Document(page_content="A", metadata={"page": 1}),
+        Document(page_content="B", metadata={"page": 2}),
+        Document(page_content="C", metadata={"page": 3}),
+    ]
+    list_b = [
+        Document(page_content="B", metadata={"page": 2}),
+        Document(page_content="D", metadata={"page": 4}),
+    ]
+    result = fuse_rrf([list_a, list_b], max_chunks=2)
+    assert len(result) == 2
+    # B has highest score (in both lists), A is next (rank 1 in list_a)
+    assert result[0].page_content == "B"
+    assert result[1].page_content == "A"
+
+
 def test_fuse_rrf_preserves_metadata() -> None:
     """Metadata from the first occurrence of a document is preserved."""
     list_a = [Document(page_content="A", metadata={"page": 1, "source": "a"})]
