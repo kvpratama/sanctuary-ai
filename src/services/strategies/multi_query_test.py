@@ -18,7 +18,6 @@ from src.schemas.chat import (
 )
 from src.services.strategies.multi_query import (
     QueryVariants,
-    deduplicate_chunks,
     execute,
     generate_query_variants,
 )
@@ -149,46 +148,9 @@ async def test_generate_query_variants_falls_back_on_exception() -> None:
     assert result == ["original question"]
 
 
-def test_deduplicate_chunks_removes_duplicates() -> None:
-    """deduplicate_chunks removes documents with identical page_content."""
-    chunks = [
-        Document(page_content="content A", metadata={"page": 1}),
-        Document(page_content="content B", metadata={"page": 2}),
-        Document(page_content="content A", metadata={"page": 1}),
-        Document(page_content="content C", metadata={"page": 3}),
-        Document(page_content="content B", metadata={"page": 2}),
-    ]
-
-    result = deduplicate_chunks(chunks)
-
-    assert len(result) == 3
-    contents = [d.page_content for d in result]
-    assert contents == ["content A", "content B", "content C"]
-
-
-def test_deduplicate_chunks_preserves_order() -> None:
-    """deduplicate_chunks preserves first-seen order."""
-    chunks = [
-        Document(page_content="second", metadata={"page": 2}),
-        Document(page_content="first", metadata={"page": 1}),
-        Document(page_content="second", metadata={"page": 2}),
-    ]
-
-    result = deduplicate_chunks(chunks)
-
-    assert len(result) == 2
-    assert result[0].page_content == "second"
-    assert result[1].page_content == "first"
-
-
-def test_deduplicate_chunks_empty_input() -> None:
-    """deduplicate_chunks returns empty list for empty input."""
-    assert deduplicate_chunks([]) == []
-
-
 @pytest.mark.asyncio
-async def test_execute_generates_variants_retrieves_deduplicates_and_streams() -> None:
-    """execute generates variants, retrieves for each, deduplicates, and streams."""
+async def test_execute_generates_variants_retrieves_fuses_and_streams() -> None:
+    """execute generates variants, retrieves for each, fuses with RRF, and streams."""
     chunks_variant_1 = [
         Document(page_content="content A", metadata={"page": 1}),
         Document(page_content="content B", metadata={"page": 2}),
@@ -262,13 +224,15 @@ async def test_execute_generates_variants_retrieves_deduplicates_and_streams() -
     mock_stream.assert_called_once()
     call_kwargs = mock_stream.call_args
     assert call_kwargs[1]["query"] == "original question"
-    # Verify deduplicated chunks (3 unique out of 4 total)
+    # Verify fused chunks: 3 unique, B ranked first (appears in both lists)
     passed_chunks = call_kwargs[1]["chunks"]
     assert len(passed_chunks) == 3
+    assert passed_chunks[0].page_content == "content B"
 
     # Verify event sequence
     assert len(results) == 3
     assert isinstance(results[0], ChunksEvent)
     assert len(results[0].chunks) == 3
+    assert results[0].chunks[0].page_content == "content B"
     assert results[1] == TokenEvent(token="Merged answer.")
     assert isinstance(results[2], CitationsEvent)

@@ -10,6 +10,7 @@ from pydantic import SecretStr
 from src.schemas.chat import Citation
 from src.services.strategies.core import (
     extract_citations,
+    fuse_rrf,
     retrieve_chunks,
     stream_answer_with_citations,
 )
@@ -289,3 +290,86 @@ async def test_stream_answer_with_citations_no_chunks() -> None:
     )
     assert results[1].type == "citations"
     assert results[1].citations == []
+
+
+def test_fuse_rrf_single_list_preserves_order() -> None:
+    """A single ranked list is returned in its original order."""
+    docs = [
+        Document(page_content="first", metadata={"page": 1}),
+        Document(page_content="second", metadata={"page": 2}),
+        Document(page_content="third", metadata={"page": 3}),
+    ]
+    result = fuse_rrf([docs])
+    assert [d.page_content for d in result] == ["first", "second", "third"]
+
+
+def test_fuse_rrf_overlapping_lists_ranks_by_fusion_score() -> None:
+    """Documents appearing in more lists rank higher than single-list documents."""
+    list_a = [
+        Document(page_content="A", metadata={"page": 1}),
+        Document(page_content="B", metadata={"page": 2}),
+    ]
+    list_b = [
+        Document(page_content="B", metadata={"page": 2}),
+        Document(page_content="C", metadata={"page": 3}),
+    ]
+    result = fuse_rrf([list_a, list_b])
+    contents = [d.page_content for d in result]
+    # B appears in both lists (rank 2 + rank 1) -> highest score
+    # A appears at rank 1 in list_a only
+    # C appears at rank 2 in list_b only -> same score as A, but A seen first
+    assert contents == ["B", "A", "C"]
+
+
+def test_fuse_rrf_no_overlap_orders_by_rank() -> None:
+    """Non-overlapping lists: all documents included, ordered by individual RRF score."""
+    list_a = [
+        Document(page_content="A", metadata={"page": 1}),
+        Document(page_content="B", metadata={"page": 2}),
+    ]
+    list_b = [
+        Document(page_content="C", metadata={"page": 3}),
+        Document(page_content="D", metadata={"page": 4}),
+    ]
+    result = fuse_rrf([list_a, list_b])
+    contents = [d.page_content for d in result]
+    # A and C both at rank 1 -> same score, A seen first
+    # B and D both at rank 2 -> same score, B seen first
+    assert contents == ["A", "C", "B", "D"]
+
+
+def test_fuse_rrf_empty_input_returns_empty() -> None:
+    """Empty input returns empty list."""
+    assert fuse_rrf([]) == []
+
+
+def test_fuse_rrf_empty_sublists_returns_empty() -> None:
+    """All-empty sublists returns empty list."""
+    assert fuse_rrf([[], []]) == []
+
+
+def test_fuse_rrf_max_chunks_limits_output() -> None:
+    """max_chunks truncates the result to the top-N documents."""
+    list_a = [
+        Document(page_content="A", metadata={"page": 1}),
+        Document(page_content="B", metadata={"page": 2}),
+        Document(page_content="C", metadata={"page": 3}),
+    ]
+    list_b = [
+        Document(page_content="B", metadata={"page": 2}),
+        Document(page_content="D", metadata={"page": 4}),
+    ]
+    result = fuse_rrf([list_a, list_b], max_chunks=2)
+    assert len(result) == 2
+    # B has highest score (in both lists), A is next (rank 1 in list_a)
+    assert result[0].page_content == "B"
+    assert result[1].page_content == "A"
+
+
+def test_fuse_rrf_preserves_metadata() -> None:
+    """Metadata from the first occurrence of a document is preserved."""
+    list_a = [Document(page_content="A", metadata={"page": 1, "source": "a"})]
+    list_b = [Document(page_content="A", metadata={"page": 1, "source": "b"})]
+    result = fuse_rrf([list_a, list_b])
+    assert len(result) == 1
+    assert result[0].metadata["source"] == "a"

@@ -1,7 +1,8 @@
 """Multi-Query RAG strategy — generate query variants and merge results.
 
 Generates multiple query variants using an LLM, retrieves chunks for each,
-deduplicates, and generates an answer from the merged context.
+fuses results using Reciprocal Rank Fusion (RRF), and generates an answer
+from the merged context.
 """
 
 import logging
@@ -16,7 +17,11 @@ from pydantic import BaseModel, Field
 from src.config import get_settings
 from src.prompts.manager import pull_eval_prompt
 from src.schemas.chat import ChunksEvent, RetrievedChunk, StreamEvent
-from src.services.strategies.core import retrieve_chunks, stream_answer_with_citations
+from src.services.strategies.core import (
+    fuse_rrf,
+    retrieve_chunks,
+    stream_answer_with_citations,
+)
 from supabase import AsyncClient
 
 logger = logging.getLogger(__name__)
@@ -85,8 +90,9 @@ async def execute(
 ) -> AsyncGenerator[StreamEvent, None]:
     """Run the multi-query RAG strategy.
 
-    Generates query variants, retrieves chunks for each, deduplicates,
-    and generates an answer using the original query.
+    Generates query variants, retrieves chunks for each, fuses results
+    using Reciprocal Rank Fusion, and generates an answer using the
+    original query.
 
     Args:
         query: The user's original question.
@@ -96,11 +102,11 @@ async def execute(
         client: Optional Supabase client to reuse.
 
     Yields:
-        ChunksEvent with deduplicated documents, then TokenEvent and CitationsEvent.
+        ChunksEvent with RRF-fused documents, then TokenEvent and CitationsEvent.
     """
     variants = await generate_query_variants(query, n=3)  # ty: ignore[invalid-argument-type]
 
-    all_chunks: list[Document] = []
+    per_variant_results: list[list[Document]] = []
     for variant in variants:
         chunks = await retrieve_chunks(
             query=variant,  # ty: ignore[invalid-argument-type]
@@ -109,34 +115,16 @@ async def execute(
             k=k,  # ty: ignore[invalid-argument-type]
             client=client,  # ty: ignore[invalid-argument-type]
         )
-        all_chunks.extend(chunks)
+        per_variant_results.append(chunks)
 
-    unique_chunks = deduplicate_chunks(all_chunks)
+    fused_chunks = fuse_rrf(per_variant_results, max_chunks=k)
 
     yield ChunksEvent(
         chunks=[
             RetrievedChunk(page_content=c.page_content, page=c.metadata.get("page"))
-            for c in unique_chunks
+            for c in fused_chunks
         ]
     )
 
-    async for event in stream_answer_with_citations(query=query, chunks=unique_chunks):  # ty: ignore[invalid-argument-type]
+    async for event in stream_answer_with_citations(query=query, chunks=fused_chunks):  # ty: ignore[invalid-argument-type]
         yield event
-
-
-def deduplicate_chunks(chunks: list[Document]) -> list[Document]:
-    """Remove duplicate chunks by page_content, preserving first-seen order.
-
-    Args:
-        chunks: List of Document objects, potentially with duplicates.
-
-    Returns:
-        Deduplicated list preserving insertion order.
-    """
-    seen: set[str] = set()
-    unique: list[Document] = []
-    for chunk in chunks:
-        if chunk.page_content not in seen:
-            seen.add(chunk.page_content)
-            unique.append(chunk)
-    return unique
