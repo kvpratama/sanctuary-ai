@@ -107,24 +107,38 @@ async def execute(
     )
     step_back = await generate_step_back_query(query=query)  # ty: ignore[invalid-argument-type]
 
-    logger.info("step_back: retrieving chunks for original and step-back queries")
     logger.debug("step_back: step-back query='%.64s'", step_back)
-    original_chunks, step_back_chunks = await asyncio.gather(
-        retrieve_chunks(
+
+    if step_back == query:
+        logger.info(
+            "step_back: step-back query identical to original, short-circuiting duplicate retrieval"
+        )
+        original_chunks = await retrieve_chunks(
             query=query,  # ty: ignore[invalid-argument-type]
             document_id=document_id,  # ty: ignore[invalid-argument-type]
             user_id=user_id,  # ty: ignore[invalid-argument-type]
             k=k,  # ty: ignore[invalid-argument-type]
             client=client,  # ty: ignore[invalid-argument-type]
-        ),
-        retrieve_chunks(
-            query=step_back,  # ty: ignore[invalid-argument-type]
-            document_id=document_id,  # ty: ignore[invalid-argument-type]
-            user_id=user_id,  # ty: ignore[invalid-argument-type]
-            k=k,  # ty: ignore[invalid-argument-type]
-            client=client,  # ty: ignore[invalid-argument-type]
-        ),
-    )
+        )
+        step_back_chunks = list(original_chunks)
+    else:
+        logger.info("step_back: retrieving chunks for original and step-back queries")
+        original_chunks, step_back_chunks = await asyncio.gather(
+            retrieve_chunks(
+                query=query,  # ty: ignore[invalid-argument-type]
+                document_id=document_id,  # ty: ignore[invalid-argument-type]
+                user_id=user_id,  # ty: ignore[invalid-argument-type]
+                k=k,  # ty: ignore[invalid-argument-type]
+                client=client,  # ty: ignore[invalid-argument-type]
+            ),
+            retrieve_chunks(
+                query=step_back,  # ty: ignore[invalid-argument-type]
+                document_id=document_id,  # ty: ignore[invalid-argument-type]
+                user_id=user_id,  # ty: ignore[invalid-argument-type]
+                k=k,  # ty: ignore[invalid-argument-type]
+                client=client,  # ty: ignore[invalid-argument-type]
+            ),
+        )
 
     fused = fuse_rrf([original_chunks, step_back_chunks], max_chunks=k)
 
