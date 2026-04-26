@@ -113,14 +113,13 @@ async def execute(
         logger.info(
             "step_back: step-back query identical to original, short-circuiting duplicate retrieval"
         )
-        original_chunks = await retrieve_chunks(
+        fused = await retrieve_chunks(
             query=query,  # ty: ignore[invalid-argument-type]
             document_id=document_id,  # ty: ignore[invalid-argument-type]
             user_id=user_id,  # ty: ignore[invalid-argument-type]
             k=k,  # ty: ignore[invalid-argument-type]
             client=client,  # ty: ignore[invalid-argument-type]
         )
-        step_back_chunks = list(original_chunks)
     else:
         logger.info("step_back: retrieving chunks for original and step-back queries")
         original_chunks, step_back_chunks = await asyncio.gather(
@@ -139,15 +138,9 @@ async def execute(
                 client=client,  # ty: ignore[invalid-argument-type]
             ),
         )
+        fused = fuse_rrf([original_chunks, step_back_chunks], max_chunks=k)
 
-    fused = fuse_rrf([original_chunks, step_back_chunks], max_chunks=k)
-
-    logger.info(
-        "step_back: fused %d + %d -> %d chunks",
-        len(original_chunks),
-        len(step_back_chunks),
-        len(fused),
-    )
+    logger.info("step_back: using %d fused chunks", len(fused))
     yield ChunksEvent(
         chunks=[
             RetrievedChunk(page_content=c.page_content, page=c.metadata.get("page"))
