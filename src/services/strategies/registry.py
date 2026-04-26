@@ -30,6 +30,7 @@ def get_strategy(name: str) -> StrategyFn:
     from src.services.strategies.self_correcting import (
         execute as self_correcting_execute,
     )
+    from src.services.strategies.step_back import execute as step_back_execute
 
     registry: dict[str, StrategyFn] = {
         "naive_rag": naive_rag_execute,
@@ -37,6 +38,7 @@ def get_strategy(name: str) -> StrategyFn:
         "multi_query": multi_query_execute,
         "self_correcting": self_correcting_execute,
         "agentic_rag": agentic_rag_execute,
+        "step_back": step_back_execute,
     }
 
     if name not in registry:
